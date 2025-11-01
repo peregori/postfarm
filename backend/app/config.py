@@ -1,0 +1,20 @@
+from pydantic_settings import BaseSettings
+from typing import Optional
+
+class Settings(BaseSettings):
+    # LLM Configuration
+    LLAMA_CPP_SERVER_URL: str = "http://localhost:8080"
+    LLAMA_MODEL_NAME: str = "default"
+    
+    # Database
+    DATABASE_URL: str = "sqlite:///./handpost.db"
+    
+    # API Settings
+    API_PREFIX: str = "/api"
+    
+    class Config:
+        env_file = ".env"
+        case_sensitive = True
+
+settings = Settings()
+

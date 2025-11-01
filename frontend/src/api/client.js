@@ -1,0 +1,170 @@
+import axios from 'axios'
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+
+const client = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 120000, // 2 minutes timeout for LLM generation (reasoning models can be slow)
+})
+
+// LLM API
+export const llmApi = {
+  generate: async (prompt, options = {}) => {
+    const response = await client.post('/llm/generate', {
+      prompt,
+      max_tokens: options.max_tokens || 500,
+      temperature: options.temperature || 0.7,
+      system_prompt: options.system_prompt,
+    })
+    return response.data
+  },
+  
+  edit: async (originalContent, editInstruction, temperature = 0.5) => {
+    const response = await client.post('/llm/edit', {
+      original_content: originalContent,
+      edit_instruction: editInstruction,
+      temperature,
+    })
+    return response.data
+  },
+  
+  health: async () => {
+    const response = await client.get('/llm/health')
+    return response.data
+  },
+}
+
+// Drafts API
+export const draftsApi = {
+  list: async () => {
+    const response = await client.get('/drafts/')
+    return response.data
+  },
+  
+  get: async (id) => {
+    const response = await client.get(`/drafts/${id}`)
+    return response.data
+  },
+  
+  create: async (draft) => {
+    const response = await client.post('/drafts/', draft)
+    return response.data
+  },
+  
+  update: async (id, draft) => {
+    const response = await client.put(`/drafts/${id}`, draft)
+    return response.data
+  },
+  
+  delete: async (id) => {
+    await client.delete(`/drafts/${id}`)
+  },
+}
+
+// Scheduler API
+export const schedulerApi = {
+  schedule: async (request) => {
+    const response = await client.post('/scheduler/schedule', request)
+    return response.data
+  },
+  
+  cancel: async (postId) => {
+    const response = await client.post(`/scheduler/${postId}/cancel`)
+    return response.data
+  },
+  
+  calendar: async (startDate, endDate) => {
+    const params = {}
+    if (startDate) params.start_date = startDate
+    if (endDate) params.end_date = endDate
+    const response = await client.get('/scheduler/calendar', { params })
+    return response.data
+  },
+}
+
+// Posts API
+export const postsApi = {
+  list: async (filters = {}) => {
+    const response = await client.get('/posts/', { params: filters })
+    return response.data
+  },
+  
+  get: async (id) => {
+    const response = await client.get(`/posts/${id}`)
+    return response.data
+  },
+}
+
+// Platforms API
+export const platformsApi = {
+  list: async () => {
+    const response = await client.get('/platforms/')
+    return response.data
+  },
+  
+  get: async (platform) => {
+    const response = await client.get(`/platforms/${platform}`)
+    return response.data
+  },
+  
+  update: async (platform, config) => {
+    const response = await client.put(`/platforms/${platform}`, config)
+    return response.data
+  },
+  
+  test: async (platform) => {
+    const response = await client.post(`/platforms/${platform}/test`)
+    return response.data
+  },
+  
+  publish: async (platform, content) => {
+    const response = await client.post(`/platforms/${platform}/publish`, {
+      content,
+    })
+    return response.data
+  },
+}
+
+// Models API
+export const modelsApi = {
+  list: async () => {
+    const response = await client.get('/models/')
+    return response.data
+  },
+  
+  getCacheDir: async () => {
+    const response = await client.get('/models/cache-dir')
+    return response.data
+  },
+}
+
+// Server API
+export const serverApi = {
+  getStatus: async () => {
+    const response = await client.get('/server/status')
+    return response.data
+  },
+  
+  start: async (modelName) => {
+    const response = await client.post('/server/start', {
+      model_name: modelName,
+    })
+    return response.data
+  },
+  
+  stop: async () => {
+    const response = await client.post('/server/stop')
+    return response.data
+  },
+  
+  getAvailableModels: async () => {
+    const response = await client.get('/server/models')
+    return response.data
+  },
+}
+
+export default client
+
