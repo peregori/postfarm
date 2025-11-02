@@ -286,25 +286,41 @@ export default function Inbox() {
                 )}
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {filteredDrafts.map((draft) => {
                   const isActive = selectedDraft?.id === draft.id
                   const preview = getPreviewText(draft.content || '')
+                  const timeAgo = formatDate(draft.created_at)
                   
                   return (
                     <div
                       key={draft.id}
                       onClick={() => setSelectedDraft(draft)}
                       className={cn(
-                        "rounded-lg border p-3 transition-colors cursor-pointer",
+                        "group rounded-lg border transition-all cursor-pointer",
+                        "hover:shadow-md hover:border-foreground/20",
                         isActive
-                          ? "bg-accent border-accent-foreground/20"
-                          : "bg-background border-border hover:bg-accent/50"
+                          ? "bg-accent border-accent-foreground/30 shadow-sm"
+                          : "bg-background border-border hover:bg-accent/30"
                       )}
                     >
-                      <p className="text-xs text-muted-foreground line-clamp-4 leading-relaxed">
-                        {preview || 'No content'}
-                      </p>
+                      {/* Header with timestamp */}
+                      <div className="flex items-center justify-end px-3 pt-2.5 pb-1.5">
+                        <span className="text-[10px] text-muted-foreground font-medium">
+                          {timeAgo}
+                        </span>
+                      </div>
+                      
+                      {/* Preview content */}
+                      <div className="px-3 pb-2.5">
+                        <p className={cn(
+                          "text-xs leading-relaxed line-clamp-4",
+                          isActive ? "text-foreground" : "text-muted-foreground",
+                          "group-hover:text-foreground transition-colors"
+                        )}>
+                          {preview || <span className="italic opacity-50">No content</span>}
+                        </p>
+                      </div>
                     </div>
                   )
                 })}
