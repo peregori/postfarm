@@ -81,7 +81,7 @@ export default function ServerStatus() {
   if (!status) {
     return (
       <div className="flex items-center gap-2">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
       </div>
     )
   }
@@ -106,7 +106,7 @@ export default function ServerStatus() {
         </>
       )}
       {actionLoading && (
-        <Loader2 className="h-4 w-4 animate-spin ml-1" />
+        <Loader2 className="h-4 w-4 animate-spin ml-1 shrink-0" />
       )}
     </Button>
   )

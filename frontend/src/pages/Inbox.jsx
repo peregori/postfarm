@@ -209,25 +209,12 @@ export default function Inbox() {
       {/* Header */}
       <div className="border-b bg-background">
         <div className="flex h-16 items-center gap-4 px-6">
-          {/* Left: Draft Count */}
-          <div className="flex items-center shrink-0">
+          {/* Left: Title and Draft Count */}
+          <div className="flex items-center gap-3 shrink-0">
+            <h2 className="text-base font-semibold">Inbox</h2>
             <Badge variant="secondary" className="h-7 px-2.5 text-xs font-medium">
               {filteredDrafts.length}
             </Badge>
-          </div>
-
-          {/* Left: Sort */}
-          <div className="flex items-center shrink-0">
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-[150px] h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="newest">Newest First</SelectItem>
-                <SelectItem value="oldest">Oldest First</SelectItem>
-                <SelectItem value="alphabetical">Alphabetical</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
           {/* Center: Search Bar */}
@@ -248,11 +235,10 @@ export default function Inbox() {
           <div className="flex items-center shrink-0">
             <Button
               onClick={handleCreateNew}
-              className="h-9"
+              className="h-9 w-10 p-0 flex items-center justify-center hover:scale-105 active:scale-95"
               variant="default"
             >
-              <Plus className="mr-2 h-4 w-4" />
-              New Draft
+              <Plus className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -263,6 +249,20 @@ export default function Inbox() {
         {/* Drafts Sidebar */}
         <div className="w-80 border-r bg-muted/30 overflow-y-auto">
           <div className="p-4">
+            {/* Sort Filter */}
+            <div className="mb-4">
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="w-full h-8 text-xs border-muted/50 bg-muted/20 hover:bg-muted/40 focus:bg-background transition-all duration-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">Newest First</SelectItem>
+                  <SelectItem value="oldest">Oldest First</SelectItem>
+                  <SelectItem value="alphabetical">Alphabetical</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
             {loading ? (
               <div className="flex items-center justify-center py-12 text-muted-foreground">
                 Loading...

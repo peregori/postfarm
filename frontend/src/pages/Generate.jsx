@@ -115,8 +115,8 @@ export default function Generate() {
     <div className="max-w-3xl mx-auto space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Create Content</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-lg font-semibold">Create Content</CardTitle>
+          <CardDescription className="text-sm">
             Write directly or use AI to generate content from a prompt.
           </CardDescription>
         </CardHeader>
@@ -153,15 +153,15 @@ export default function Generate() {
             <Separator />
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-muted-foreground" />
-              <label className="block text-sm font-medium">
+              <label className="text-sm font-medium">
                 Or generate with AI (optional)
               </label>
             </div>
             
             {serverStatus === 'unavailable' && (
               <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 flex items-center gap-2 text-sm text-destructive">
-                <AlertCircle className="h-4 w-4" />
-                <span>LLM server not connected. Connect it from the top right menu first.</span>
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span className="text-sm">LLM server not connected. Connect it from the top right menu first.</span>
               </div>
             )}
             

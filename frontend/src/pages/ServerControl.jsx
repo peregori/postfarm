@@ -115,8 +115,8 @@ export default function ServerControl() {
     <div className="max-w-4xl mx-auto space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center">
-            <Power className="mr-2" size={24} />
+          <CardTitle className="flex items-center text-lg font-semibold">
+            <Power className="mr-2 h-5 w-5" />
             LLM Server Control
           </CardTitle>
           <CardDescription>
@@ -134,9 +134,9 @@ export default function ServerControl() {
                   <div className="flex items-center gap-3">
                     {status?.running ? (
                       <>
-                        <CheckCircle className="text-green-600 dark:text-green-400" size={24} />
+                        <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400 shrink-0" />
                         <div>
-                          <div className="font-medium text-foreground">Server Running</div>
+                          <div className="text-sm font-semibold text-foreground">Server Running</div>
                           <div className="text-sm text-muted-foreground">
                             {status.url}
                             {status.model && (
@@ -151,9 +151,9 @@ export default function ServerControl() {
                       </>
                     ) : (
                       <>
-                        <AlertCircle className="text-muted-foreground" size={24} />
+                        <AlertCircle className="h-6 w-6 text-muted-foreground shrink-0" />
                         <div>
-                          <div className="font-medium text-foreground">Server Stopped</div>
+                          <div className="text-sm font-semibold text-foreground">Server Stopped</div>
                           <div className="text-sm text-muted-foreground">Not running</div>
                         </div>
                       </>
@@ -165,7 +165,7 @@ export default function ServerControl() {
                     size="icon"
                     disabled={loading}
                   >
-                    <RefreshCw className={cn("h-4 w-4", loading && 'animate-spin')} />
+                    <RefreshCw className={cn("h-4 w-4 shrink-0", loading && 'animate-spin')} />
                   </Button>
                 </div>
               </CardContent>
@@ -177,8 +177,8 @@ export default function ServerControl() {
             <label className="block text-sm font-medium mb-2">Select Model</label>
             {models.length === 0 ? (
               <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <AlertDescription className="text-sm">
                   No models found in ~/Library/Caches/llama.cpp
                   <br />
                   <span className="text-xs mt-1 block">
@@ -272,8 +272,8 @@ export default function ServerControl() {
 
           {/* Info */}
           <Alert className="mt-6">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <AlertDescription className="text-sm">
               <strong>Note:</strong> The server needs the <code className="px-1 py-0.5 bg-muted rounded text-xs">llama-server</code> binary in your PATH.
               <br />
               If you get an error, make sure llama.cpp is installed and the binary is accessible.

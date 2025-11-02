@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Calendar, Clock, Send, Twitter, Linkedin, CheckCircle, X, Trash2 } from 'lucide-react'
+import { Calendar, Clock, Send, Twitter, Linkedin, CheckCircle, X, Trash2, Search, Plus } from 'lucide-react'
 import { draftsApi, schedulerApi, platformsApi } from '../api/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,6 +18,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { format } from 'date-fns'
 
 export default function Schedule() {
@@ -34,6 +41,8 @@ export default function Schedule() {
   const [scheduledTime, setScheduledTime] = useState('')
   const [showScheduleDialog, setShowScheduleDialog] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortBy, setSortBy] = useState('newest') // 'newest', 'oldest', 'alphabetical'
 
   useEffect(() => {
     loadDrafts()
@@ -304,30 +313,88 @@ export default function Schedule() {
   const today = new Date().toISOString().split('T')[0]
   const preview = selectedDraft ? getPreviewText(selectedDraft.content || '') : ''
 
+  const filteredDrafts = drafts.filter((draft) => {
+    if (!searchQuery) return true
+    const query = searchQuery.toLowerCase()
+    return draft.content?.toLowerCase().includes(query)
+  }).sort((a, b) => {
+    if (sortBy === 'oldest') {
+      return new Date(a.created_at) - new Date(b.created_at)
+    } else if (sortBy === 'alphabetical') {
+      return (a.content || '').localeCompare(b.content || '')
+    } else {
+      // 'newest' - default
+      return new Date(b.created_at) - new Date(a.created_at)
+    }
+  })
+
   return (
     <DndContext onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
-      <div className="flex h-full overflow-hidden">
-      {/* Drafts Sidebar */}
-      <div className="w-64 md:w-80 border-r bg-muted/30 overflow-y-auto scrollbar-thin transition-all duration-200">
-        <div className="p-4">
-          <h2 className="text-base font-semibold mb-4">Ready to Schedule</h2>
+      <div className="flex flex-col h-[calc(100vh-8rem)]">
+        {/* Header */}
+        <div className="border-b bg-background">
+          <div className="flex h-16 items-center gap-4 px-6">
+            {/* Left: Title and Scheduled Count */}
+            <div className="flex items-center gap-3 shrink-0">
+              <h2 className="text-base font-semibold">Schedule</h2>
+              <Badge variant="secondary" className="h-7 px-2.5 text-xs font-medium">
+                {scheduled.length}
+              </Badge>
+            </div>
+
+            {/* Center: Search Bar */}
+            <div className="flex-1 flex justify-center">
+              <div className="relative w-full max-w-2xl">
+                <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground shrink-0" />
+                <Input
+                  type="text"
+                  placeholder="Search drafts..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-9 text-base"
+                />
+              </div>
+            </div>
+
+            {/* Right: Spacer or Action Button */}
+            <div className="flex items-center shrink-0 w-10">
+              {/* Empty space for alignment */}
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex flex-1 overflow-hidden h-full">
+          {/* Drafts Sidebar */}
+          <div className="w-64 md:w-80 border-r bg-muted/30 overflow-y-auto scrollbar-thin transition-all duration-200">
+            <div className="p-4">
           
-          {drafts.length === 0 ? (
+          {filteredDrafts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Calendar className="mb-4 h-12 w-12 text-muted-foreground opacity-50 mx-auto" />
               <p className="text-sm text-muted-foreground">
-                No drafts available
+                {searchQuery ? 'No drafts found' : 'No drafts available'}
               </p>
               <p className="text-xs text-muted-foreground mt-2">
-                Create drafts in Inbox first
+                {searchQuery ? 'Try a different search' : 'Create drafts in Inbox first'}
               </p>
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground mb-2">
-                Drag drafts to calendar to schedule
-              </p>
-              {drafts.map((draft) => {
+              {/* Sort Filter */}
+              <div className="mb-2">
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-full h-8 text-xs border-muted/50 bg-muted/20 hover:bg-muted/40 focus:bg-background transition-all duration-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="newest">Newest First</SelectItem>
+                    <SelectItem value="oldest">Oldest First</SelectItem>
+                    <SelectItem value="alphabetical">Alphabetical</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {filteredDrafts.map((draft) => {
                 const isSelected = selectedDraft?.id === draft.id
                 
                 return (
@@ -340,35 +407,37 @@ export default function Schedule() {
               })}
             </div>
           )}
-        </div>
-      </div>
+            </div>
+          </div>
 
-      {/* Calendar View */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-hidden min-h-0 p-6">
-          <CalendarView
-          scheduledPosts={scheduled.map(s => ({ ...s, type: 'scheduled' }))}
-          onDateClick={(date) => {
-            // Auto-fill date when clicking calendar
-            if (selectedDraft && !scheduledDate) {
-              setScheduledDate(format(date, 'yyyy-MM-dd'))
-              setShowScheduleDialog(true)
-            }
-          }}
-          onPostClick={(post) => {
-            // Show post details - allow cancel
-            setSelectedDraft(post)
-            // Pre-fill date/time from scheduled post
-            if (post.scheduled_time) {
-              const scheduledDate = new Date(post.scheduled_time)
-              setScheduledDate(format(scheduledDate, 'yyyy-MM-dd'))
-              setScheduledTime(format(scheduledDate, 'HH:mm'))
-            }
-            setPlatform(post.platform || 'twitter')
-            setShowScheduleDialog(true)
-          }}
-          onDraftDrop={handleDraftDrop}
-        />
+          {/* Calendar View */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-hidden min-h-0 p-6">
+              <CalendarView
+                scheduledPosts={scheduled.map(s => ({ ...s, type: 'scheduled' }))}
+                onDateClick={(date) => {
+                  // Auto-fill date when clicking calendar
+                  if (selectedDraft && !scheduledDate) {
+                    setScheduledDate(format(date, 'yyyy-MM-dd'))
+                    setShowScheduleDialog(true)
+                  }
+                }}
+                onPostClick={(post) => {
+                  // Show post details - allow cancel
+                  setSelectedDraft(post)
+                  // Pre-fill date/time from scheduled post
+                  if (post.scheduled_time) {
+                    const scheduledDate = new Date(post.scheduled_time)
+                    setScheduledDate(format(scheduledDate, 'yyyy-MM-dd'))
+                    setScheduledTime(format(scheduledDate, 'HH:mm'))
+                  }
+                  setPlatform(post.platform || 'twitter')
+                  setShowScheduleDialog(true)
+                }}
+                onDraftDrop={handleDraftDrop}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -531,7 +600,6 @@ export default function Schedule() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      </div>
     </DndContext>
   )
 }

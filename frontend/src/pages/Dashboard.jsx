@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { FileText, Calendar, TrendingUp, AlertCircle } from 'lucide-react'
+import { FileText, Calendar, Send, Zap } from 'lucide-react'
 import { draftsApi, schedulerApi, llmApi } from '../api/client'
 
 export default function Dashboard() {
@@ -45,7 +45,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-400">Loading...</div>
+        <div className="text-sm text-muted-foreground">Loading...</div>
       </div>
     )
   }
@@ -69,13 +69,13 @@ export default function Dashboard() {
         <StatCard
           title="Posted"
           value={stats.posted}
-          icon={TrendingUp}
+          icon={Send}
           color="purple"
         />
         <StatCard
           title="LLM Status"
           value={stats.llmHealth ? 'Online' : 'Offline'}
-          icon={AlertCircle}
+          icon={Zap}
           color={stats.llmHealth ? 'green' : 'red'}
         />
       </div>
@@ -100,12 +100,12 @@ export default function Dashboard() {
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Recent Drafts</h3>
-          <Link to="/drafts" className="text-sm text-primary-400 hover:text-primary-300">
+          <Link to="/drafts" className="text-sm font-medium text-primary hover:text-primary/80">
             View all
           </Link>
         </div>
         {recentDrafts.length === 0 ? (
-          <p className="text-gray-400">No drafts yet. Create your first one!</p>
+          <p className="text-sm text-muted-foreground">No drafts yet. Create your first one!</p>
         ) : (
           <div className="space-y-3">
             {recentDrafts.map((draft) => (
@@ -116,14 +116,14 @@ export default function Dashboard() {
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <h4 className="font-medium text-white mb-1">
+                    <h4 className="text-sm font-semibold mb-1">
                       {draft.title || 'Untitled Draft'}
                     </h4>
-                    <p className="text-sm text-gray-400 line-clamp-2">
+                    <p className="text-sm text-muted-foreground line-clamp-2">
                       {draft.content}
                     </p>
                   </div>
-                  <span className="text-xs text-gray-500 ml-4">
+                  <span className="text-xs text-muted-foreground ml-4">
                     {new Date(draft.created_at).toLocaleDateString()}
                   </span>
                 </div>
@@ -148,11 +148,11 @@ function StatCard({ title, value, icon: Icon, color }) {
     <div className="card">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-400 mb-1">{title}</p>
+          <p className="text-sm font-medium text-gray-400 mb-1">{title}</p>
           <p className="text-2xl font-bold">{value}</p>
         </div>
         <div className={`p-3 rounded-lg ${colorClasses[color]}`}>
-          <Icon size={24} />
+          <Icon className="h-5 w-5" />
         </div>
       </div>
     </div>

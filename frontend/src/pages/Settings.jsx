@@ -187,7 +187,7 @@ export default function Settings() {
       {/* Page Header */}
       <div className="space-y-1">
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Configure your AI model and connect social media platforms
         </p>
       </div>
@@ -250,7 +250,7 @@ export default function Settings() {
           </div>
           <div>
             <h2 className="text-2xl font-bold tracking-tight">Platform Connections</h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-sm text-muted-foreground">
               Connect your accounts to enable automated posting
             </p>
           </div>
@@ -260,7 +260,7 @@ export default function Settings() {
           <Card>
             <CardContent className="py-12 text-center">
               <SettingsIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-              <h3 className="text-lg font-semibold mb-2">No Platforms Available</h3>
+              <h3 className="text-base font-semibold mb-2">No Platforms Available</h3>
               <p className="text-sm text-muted-foreground mb-4">
                 Platform configurations are loading. If this persists, check your backend connection.
               </p>
@@ -311,7 +311,7 @@ export default function Settings() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1.5">
-                              <h3 className="text-lg font-bold capitalize">{platformName}</h3>
+                              <h3 className="text-base font-bold capitalize">{platformName}</h3>
                               <div className="flex items-center gap-2 flex-wrap">
                                 {isConnected ? (
                                   <Badge variant="secondary" className="bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/30">
@@ -354,7 +354,7 @@ export default function Settings() {
                                   )}
                                   title={isActive ? 'Disable posting' : 'Enable posting'}
                                 >
-                                  <Power className={cn("h-5 w-5", isActive ? "" : "opacity-40")} />
+                                  <Power className={cn("h-4 w-4", isActive ? "" : "opacity-40")} />
                                 </Button>
                               )}
                               <Button
@@ -369,7 +369,7 @@ export default function Settings() {
                                 className="gap-2"
                               >
                                 {isConnected ? 'Edit' : 'Connect'}
-                                {!isConnected && <ArrowRight className="h-4 w-4" />}
+                                  {!isConnected && <ArrowRight className="h-4 w-4 shrink-0" />}
                               </Button>
                             </>
                           ) : (
@@ -416,7 +416,7 @@ export default function Settings() {
                                   onClick={() => setShowPasswords(prev => ({ ...prev, [`${platformName}_bearer`]: !prev[`${platformName}_bearer`] }))}
                                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                                 >
-                                  {showPasswords[`${platformName}_bearer`] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                  {showPasswords[`${platformName}_bearer`] ? <EyeOff className="h-4 w-4 shrink-0" /> : <Eye className="h-4 w-4 shrink-0" />}
                                 </button>
                               </div>
                               <p className="text-xs text-muted-foreground">
@@ -428,7 +428,7 @@ export default function Settings() {
                                   className="text-primary hover:underline inline-flex items-center gap-1 font-medium"
                                 >
                                   Twitter Developer Portal
-                                  <ExternalLink className="h-3 w-3" />
+                                  <ExternalLink className="h-3 w-3 shrink-0" />
                                 </a>
                               </p>
                             </div>
@@ -464,7 +464,7 @@ export default function Settings() {
                                     onClick={() => setShowPasswords(prev => ({ ...prev, [`${platformName}_token`]: !prev[`${platformName}_token`] }))}
                                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                                   >
-                                    {showPasswords[`${platformName}_token`] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                    {showPasswords[`${platformName}_token`] ? <EyeOff className="h-4 w-4 shrink-0" /> : <Eye className="h-4 w-4 shrink-0" />}
                                   </button>
                                 </div>
                               </div>

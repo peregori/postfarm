@@ -157,15 +157,15 @@ export default function Drafts() {
       <div className="lg:col-span-1">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <FileText className="mr-2" size={20} />
+            <CardTitle className="flex items-center text-lg font-semibold">
+              <FileText className="mr-2 h-5 w-5" />
               Drafts
             </CardTitle>
           </CardHeader>
           <CardContent>
             {/* Search */}
             <div className="relative mb-4">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={18} />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 type="text"
                 className="pl-10"
@@ -193,7 +193,7 @@ export default function Drafts() {
                         : 'bg-background hover:bg-accent/50'
                     )}
                   >
-                    <h3 className="font-medium mb-1 truncate">
+                    <h3 className="text-sm font-semibold mb-1 truncate">
                       {draft.title || 'Untitled Draft'}
                     </h3>
                     <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
@@ -210,7 +210,7 @@ export default function Drafts() {
                         }}
                         className="text-destructive hover:text-destructive/80"
                       >
-                        <Trash2 size={14} />
+                        <Trash2 className="h-3 w-3" />
                       </button>
                     </div>
                   </div>
@@ -227,11 +227,11 @@ export default function Drafts() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Edit Draft</CardTitle>
+                <CardTitle className="text-lg font-semibold">Edit Draft</CardTitle>
                 <Button
                   onClick={() => navigate(`/schedule?draftId=${selectedDraft.id}`)}
                 >
-                  <Calendar className="mr-2" size={18} />
+                  <Calendar className="mr-2 h-4 w-4" />
                   Schedule
                 </Button>
               </div>
@@ -278,8 +278,8 @@ export default function Drafts() {
         ) : (
           <Card className="flex items-center justify-center h-full min-h-[400px]">
             <CardContent className="text-center text-muted-foreground pt-6">
-              <FileText size={48} className="mx-auto mb-4 opacity-50" />
-              <p>Select a draft to edit</p>
+              <FileText className="h-12 w-12 mx-auto mb-4 opacity-50 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Select a draft to edit</p>
             </CardContent>
           </Card>
         )}
