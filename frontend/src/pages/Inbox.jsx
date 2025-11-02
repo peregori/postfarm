@@ -206,7 +206,7 @@ export default function Inbox() {
       </div>
 
       {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden h-full">
         {/* Drafts Sidebar */}
         <div className="w-80 border-r bg-muted/30 overflow-y-auto">
           <div className="p-4">
@@ -258,14 +258,9 @@ export default function Inbox() {
                           : "bg-background border-border hover:bg-accent/50"
                       )}
                     >
-                      <p className="text-xs text-foreground line-clamp-3 mb-2 whitespace-pre-wrap">
+                      <p className="text-xs text-foreground line-clamp-4 whitespace-pre-wrap leading-relaxed">
                         {preview || 'No content'}
                       </p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">
-                          {formatDate(draft.created_at)}
-                        </span>
-                      </div>
                     </div>
                   )
                 })}
