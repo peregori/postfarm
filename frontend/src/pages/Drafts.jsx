@@ -24,6 +24,7 @@ export default function Drafts() {
   const [selectedDraft, setSelectedDraft] = useState(null)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [draftToDelete, setDraftToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
   const [originalDraft, setOriginalDraft] = useState(null)
   const navigate = useNavigate()
 
@@ -82,11 +83,12 @@ export default function Drafts() {
   }
 
   const handleConfirmDelete = async () => {
-    if (!draftToDelete) return
+    if (!draftToDelete || deleting) return
 
+    setDeleting(true)
+    
     try {
       await draftsApi.delete(draftToDelete)
-      showToast.success('Draft Deleted', 'Draft deleted successfully.')
       
       // Update state immediately
       setDrafts(prevDrafts => prevDrafts.filter((d) => d.id !== draftToDelete))
@@ -97,14 +99,22 @@ export default function Drafts() {
         setOriginalDraft(null)
       }
       
-      // Reload to ensure consistency
-      await loadDrafts()
+      showToast.success('Draft Deleted', 'Draft deleted successfully.')
+      
+      // Close dialog immediately after success
+      setShowDeleteDialog(false)
+      setDraftToDelete(null)
+      
+      // Reload in background (don't wait for it)
+      loadDrafts().catch(err => console.error('Failed to reload drafts:', err))
     } catch (error) {
       console.error('Failed to delete draft:', error)
       showToast.error('Delete Failed', error.response?.data?.detail || 'Failed to delete draft.')
-    } finally {
+      // Still close dialog on error so user can try again
       setShowDeleteDialog(false)
       setDraftToDelete(null)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -291,11 +301,16 @@ export default function Drafts() {
                 setShowDeleteDialog(false)
                 setDraftToDelete(null)
               }}
+              disabled={deleting}
             >
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleConfirmDelete}>
-              Delete
+            <Button 
+              variant="destructive" 
+              onClick={handleConfirmDelete}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting...' : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>

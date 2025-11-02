@@ -44,6 +44,7 @@ export default function Inbox() {
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [platformFilter, setPlatformFilter] = useState('all')
 
   useEffect(() => {
@@ -111,22 +112,30 @@ export default function Inbox() {
   }
 
   const handleDelete = async () => {
-    if (!selectedDraft?.id) {
-      // New draft, just clear selection
-      setSelectedDraft(null)
+    if (!selectedDraft?.id || deleting) {
+      if (!selectedDraft?.id) {
+        // New draft, just clear selection
+        setSelectedDraft(null)
+        setShowDeleteDialog(false)
+      }
       return
     }
+
+    setDeleting(true)
 
     try {
       await draftsApi.delete(selectedDraft.id)
       setDrafts(drafts.filter(d => d.id !== selectedDraft.id))
       setSelectedDraft(null)
       showToast.success('Draft Deleted', 'Draft deleted successfully.')
+      setShowDeleteDialog(false)
     } catch (error) {
       console.error('Delete failed:', error)
       showToast.error('Delete Failed', 'Failed to delete draft.')
-    } finally {
+      // Still close dialog on error
       setShowDeleteDialog(false)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -313,11 +322,16 @@ export default function Inbox() {
             <Button
               variant="outline"
               onClick={() => setShowDeleteDialog(false)}
+              disabled={deleting}
             >
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete
+            <Button 
+              variant="destructive" 
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting...' : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>
