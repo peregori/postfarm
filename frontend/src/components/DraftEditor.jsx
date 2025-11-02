@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Sparkles, Eye, Edit2, Save, X, Send, Calendar, Trash2, Loader2, Twitter, Linkedin, Undo2 } from 'lucide-react'
+import { Sparkles, Eye, Edit2, Save, X, Send, Loader2, Twitter, Linkedin, Undo2 } from 'lucide-react'
 import { llmApi } from '../api/client'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -18,8 +18,8 @@ import { Input } from '@/components/ui/input'
 export default function DraftEditor({
   draft,
   onSave,
-  onDelete,
-  onSchedule,
+  onDiscard,
+  onPostNow,
   onAccept,
   autoSave = true,
   showActions = true,
@@ -160,15 +160,15 @@ export default function DraftEditor({
     }
   }
 
-  const handleSchedule = () => {
-    if (onSchedule) {
-      onSchedule({ content, draftId: draft?.id })
+  const handleDiscard = () => {
+    if (onDiscard) {
+      onDiscard()
     }
   }
 
-  const handleDelete = () => {
-    if (onDelete) {
-      onDelete()
+  const handlePostNow = () => {
+    if (onPostNow) {
+      onPostNow()
     }
   }
 
@@ -233,11 +233,11 @@ export default function DraftEditor({
           <Tabs value={viewMode} onValueChange={setViewMode} className="w-auto">
             <TabsList size="sm">
               <TabsTrigger value="split" className="gap-2">
-                <Eye className="h-4 w-4" />
+                <Eye className="h-4 w-4 shrink-0" />
                 Split
               </TabsTrigger>
               <TabsTrigger value="preview" className="gap-2">
-                <Eye className="h-4 w-4" />
+                <Eye className="h-4 w-4 shrink-0" />
                 Preview
               </TabsTrigger>
             </TabsList>
@@ -246,11 +246,11 @@ export default function DraftEditor({
           {/* Platform Indicators */}
           <div className="flex items-center gap-2 ml-4">
             <Badge variant={twitterLimits.fits ? 'secondary' : 'destructive'} className="gap-1">
-              <Twitter className="h-3 w-3" />
+              <Twitter className="h-3 w-3 shrink-0" />
               {twitterLimits.count} / {twitterLimits.limit}
             </Badge>
             <Badge variant={linkedinLimits.fits ? 'secondary' : 'destructive'} className="gap-1">
-              <Linkedin className="h-3 w-3" />
+              <Linkedin className="h-3 w-3 shrink-0" />
               {linkedinLimits.count} / {linkedinLimits.limit}
             </Badge>
           </div>
@@ -261,7 +261,7 @@ export default function DraftEditor({
           <Popover open={showAiGenerate} onOpenChange={setShowAiGenerate}>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm">
-                <Sparkles className="mr-2 h-4 w-4" />
+                <Sparkles className="mr-2 h-4 w-4 shrink-0" />
                 Generate
               </Button>
             </PopoverTrigger>
@@ -290,7 +290,7 @@ export default function DraftEditor({
                     {isGenerating ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
-                      <Sparkles className="mr-2 h-4 w-4" />
+                      <Sparkles className="mr-2 h-4 w-4 shrink-0" />
                     )}
                     Generate
                   </Button>
@@ -316,7 +316,7 @@ export default function DraftEditor({
               onClick={handleUndo}
               title="Undo last AI edit"
             >
-              <Undo2 className="mr-2 h-4 w-4" />
+              <Undo2 className="mr-2 h-4 w-4 shrink-0" />
               Undo
             </Button>
           )}
@@ -378,14 +378,25 @@ export default function DraftEditor({
           </div>
           <div className="flex items-center gap-2">
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
               onClick={handleSave}
-              disabled={!hasChanges}
+              disabled={!content.trim()}
             >
-              <Save className="mr-2 h-4 w-4" />
+              <Save className="mr-2 h-4 w-4 shrink-0" />
               Save
             </Button>
+            {onPostNow && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handlePostNow}
+                disabled={!content.trim()}
+              >
+                <Send className="mr-2 h-4 w-4 shrink-0" />
+                Post Now
+              </Button>
+            )}
             {onAccept && (
               <Button
                 variant="default"
@@ -396,25 +407,14 @@ export default function DraftEditor({
                 Accept
               </Button>
             )}
-            {onSchedule && (
+            {onDiscard && (
               <Button
-                variant="default"
+                variant="outline"
                 size="sm"
-                onClick={handleSchedule}
-                disabled={!content.trim()}
+                onClick={handleDiscard}
               >
-                <Calendar className="mr-2 h-4 w-4" />
-                Schedule
-              </Button>
-            )}
-            {onDelete && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleDelete}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Decline
+                <X className="mr-2 h-4 w-4 shrink-0" />
+                Discard
               </Button>
             )}
           </div>

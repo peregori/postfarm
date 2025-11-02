@@ -308,13 +308,13 @@ export default function Schedule() {
     <DndContext onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
       <div className="flex h-full overflow-hidden">
       {/* Drafts Sidebar */}
-      <div className="w-80 border-r bg-muted/30 overflow-y-auto scrollbar-thin">
+      <div className="w-64 md:w-80 border-r bg-muted/30 overflow-y-auto scrollbar-thin transition-all duration-200">
         <div className="p-4">
-          <h2 className="text-lg font-semibold mb-4">Ready to Schedule</h2>
+          <h2 className="text-base font-semibold mb-4">Ready to Schedule</h2>
           
           {drafts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Calendar className="mb-4 h-12 w-12 text-muted-foreground opacity-50" />
+              <Calendar className="mb-4 h-12 w-12 text-muted-foreground opacity-50 mx-auto" />
               <p className="text-sm text-muted-foreground">
                 No drafts available
               </p>
@@ -324,7 +324,7 @@ export default function Schedule() {
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-xs text-muted-foreground mb-2">
+              <p className="text-xs font-medium text-muted-foreground mb-2">
                 Drag drafts to calendar to schedule
               </p>
               {drafts.map((draft) => {
@@ -396,7 +396,7 @@ export default function Schedule() {
                       : 'border-input hover:bg-accent'
                   )}
                 >
-                  <Twitter className="mr-2" size={20} />
+                  <Twitter className="mr-2 h-5 w-5" />
                   Twitter / X
                 </button>
                 <button
@@ -408,7 +408,7 @@ export default function Schedule() {
                       : 'border-input hover:bg-accent'
                   )}
                 >
-                  <Linkedin className="mr-2" size={20} />
+                  <Linkedin className="mr-2 h-5 w-5" />
                   LinkedIn
                 </button>
               </div>
@@ -518,12 +518,12 @@ export default function Schedule() {
             >
               {loading ? (
                 <>
-                  <Clock className="mr-2 h-4 w-4 animate-spin" />
+                  <Clock className="mr-2 h-4 w-4 animate-spin shrink-0" />
                   Scheduling...
                 </>
               ) : (
                 <>
-                  <Calendar className="mr-2 h-4 w-4" />
+                  <Calendar className="mr-2 h-4 w-4 shrink-0" />
                   Schedule
                 </>
               )}
