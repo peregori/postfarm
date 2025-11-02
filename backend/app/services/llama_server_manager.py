@@ -3,8 +3,10 @@ import os
 import signal
 import psutil
 import httpx
+import asyncio
 from typing import Optional, Dict
 from pathlib import Path
+from datetime import datetime, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
@@ -17,6 +19,14 @@ class LlamaServerManager:
         self.server_url = "http://localhost:8080"
         self.cache_dir = os.path.expanduser("~/Library/Caches/llama.cpp")
         self.port = 8080
+        self.model_name: Optional[str] = None
+        self.monitor_task: Optional[asyncio.Task] = None
+        self.auto_restart_enabled = True
+        self.restart_count = 0
+        self.max_restarts_per_hour = 5
+        self.restart_history: list[datetime] = []
+        self.last_health_check: Optional[datetime] = None
+        self.health_check_interval = 30  # seconds
         
     def find_llama_server(self) -> Optional[str]:
         """Find llama-server binary in PATH"""
@@ -151,6 +161,10 @@ class LlamaServerManager:
             
             # Verify it's actually running
             if self.is_server_running():
+                self.model_name = model_name
+                # Start health monitoring if enabled
+                if self.auto_restart_enabled:
+                    self._start_monitoring()
                 return {
                     "success": True,
                     "message": f"Server started successfully with model: {model_name}",
@@ -172,8 +186,87 @@ class LlamaServerManager:
                 "status": "error"
             }
     
+    def _can_restart(self) -> bool:
+        """Check if we can restart (rate limiting)"""
+        now = datetime.now()
+        # Clean old restart history (older than 1 hour)
+        self.restart_history = [
+            rt for rt in self.restart_history
+            if now - rt < timedelta(hours=1)
+        ]
+        
+        # Check if we've exceeded max restarts per hour
+        if len(self.restart_history) >= self.max_restarts_per_hour:
+            logger.warning(f"Max restarts per hour ({self.max_restarts_per_hour}) exceeded")
+            return False
+        
+        return True
+    
+    async def _monitor_health(self):
+        """Monitor server health and auto-restart on crash"""
+        while self.auto_restart_enabled:
+            try:
+                await asyncio.sleep(self.health_check_interval)
+                
+                if not self.model_name:
+                    # No model started, nothing to monitor
+                    continue
+                
+                is_running = self.is_server_running()
+                
+                if not is_running:
+                    # Check if we have a process that died
+                    if self.process and self.process.poll() is not None:
+                        # Process crashed or stopped unexpectedly
+                        logger.warning("Server process appears to have crashed")
+                        
+                        # Clear the process reference
+                        self.process = None
+                        
+                        # Check if we can restart
+                        if not self._can_restart():
+                            logger.error("Cannot auto-restart: rate limit exceeded")
+                            self.model_name = None  # Clear model to stop monitoring
+                            continue
+                        
+                        # Attempt auto-restart
+                        if self.model_name:
+                            logger.info(f"Attempting to auto-restart server with model: {self.model_name}")
+                            self.restart_history.append(datetime.now())
+                            saved_model = self.model_name
+                            result = await self.start_server(saved_model)
+                            
+                            if result.get("success"):
+                                logger.info("Server auto-restarted successfully")
+                                self.restart_count += 1
+                            else:
+                                logger.error(f"Auto-restart failed: {result.get('message')}")
+                                # If restart fails, don't keep trying immediately
+                                # Wait for next check cycle
+                            
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in health monitor: {e}")
+                await asyncio.sleep(self.health_check_interval)
+    
+    def _start_monitoring(self):
+        """Start health monitoring task"""
+        if self.monitor_task and not self.monitor_task.done():
+            return  # Already monitoring
+        
+        self.monitor_task = asyncio.create_task(self._monitor_health())
+        logger.info("Health monitoring started")
+    
+    def _stop_monitoring(self):
+        """Stop health monitoring task"""
+        if self.monitor_task and not self.monitor_task.done():
+            self.monitor_task.cancel()
+            logger.info("Health monitoring stopped")
+    
     async def stop_server(self) -> Dict:
         """Stop llama.cpp server"""
+        self._stop_monitoring()
         stopped = False
         
         # Stop our managed process
@@ -197,6 +290,7 @@ class LlamaServerManager:
                     pass
             finally:
                 self.process = None
+                self.model_name = None
         
         # Also try to find and kill any other llama-server on our port
         try:
@@ -238,9 +332,24 @@ class LlamaServerManager:
             "url": self.server_url,
             "port": self.port,
             "pid": self.process.pid if self.process and self.process.poll() is None else None,
+            "model": self.model_name,
+            "auto_restart": self.auto_restart_enabled,
+            "restart_count": self.restart_count,
         }
         
-        # Try to get model info if server is running
+        # Get resource usage if process is running
+        if self.process and self.process.poll() is None:
+            try:
+                proc = psutil.Process(self.process.pid)
+                status["resources"] = {
+                    "cpu_percent": proc.cpu_percent(),
+                    "memory_mb": proc.memory_info().rss / 1024 / 1024,
+                    "num_threads": proc.num_threads(),
+                }
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        
+        # Try to get model info from API if server is running
         if is_running:
             try:
                 async with httpx.AsyncClient(timeout=2.0) as client:
@@ -248,7 +357,7 @@ class LlamaServerManager:
                     if response.status_code == 200:
                         data = response.json()
                         if "data" in data and len(data["data"]) > 0:
-                            status["model"] = data["data"][0].get("id", "unknown")
+                            status["model"] = data["data"][0].get("id", self.model_name or "unknown")
             except:
                 pass
         

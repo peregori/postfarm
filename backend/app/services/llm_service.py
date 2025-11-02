@@ -1,7 +1,10 @@
 import httpx
 import os
 import re
+import hashlib
+import json
 from typing import Optional
+from datetime import datetime, timedelta
 from app.config import settings
 
 class LLMService:
@@ -10,7 +13,60 @@ class LLMService:
     def __init__(self):
         self.base_url = settings.LLAMA_CPP_SERVER_URL
         self.timeout = 180.0  # 3 minutes timeout for LLM generation (reasoning models can be slow)
+        # Simple in-memory cache: {cache_key: (content, expiry_time)}
+        self._cache: dict[str, tuple[str, datetime]] = {}
+        self._cache_ttl = timedelta(hours=24)  # Cache for 24 hours
+        self._max_cache_size = 1000  # Limit cache size
         
+    def _get_cache_key(
+        self,
+        prompt: str,
+        system_prompt: str,
+        max_tokens: int,
+        temperature: float
+    ) -> str:
+        """Generate a cache key from prompt and parameters"""
+        # Create a hash from the request parameters
+        # For caching purposes, we round temperature to 2 decimals to allow some variance
+        cache_data = {
+            "prompt": prompt,
+            "system_prompt": system_prompt,
+            "max_tokens": max_tokens,
+            "temperature": round(temperature, 2)
+        }
+        cache_string = json.dumps(cache_data, sort_keys=True)
+        return hashlib.sha256(cache_string.encode()).hexdigest()
+    
+    def _get_cached_content(self, cache_key: str) -> Optional[str]:
+        """Get cached content if it exists and hasn't expired"""
+        if cache_key not in self._cache:
+            return None
+        
+        content, expiry_time = self._cache[cache_key]
+        
+        # Check if expired
+        if datetime.now() > expiry_time:
+            del self._cache[cache_key]
+            return None
+        
+        return content
+    
+    def _set_cached_content(self, cache_key: str, content: str):
+        """Store content in cache"""
+        # Limit cache size - remove oldest entries if needed
+        if len(self._cache) >= self._max_cache_size:
+            # Remove oldest 10% of entries
+            sorted_items = sorted(
+                self._cache.items(),
+                key=lambda x: x[1][1]  # Sort by expiry time
+            )
+            to_remove = len(sorted_items) // 10
+            for key, _ in sorted_items[:to_remove]:
+                del self._cache[key]
+        
+        expiry_time = datetime.now() + self._cache_ttl
+        self._cache[cache_key] = (content, expiry_time)
+
     async def generate_content(
         self, 
         prompt: str, 
@@ -46,6 +102,13 @@ Keep responses concise and platform-appropriate."""
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content}
         ]
+        
+        # Check cache first (only for non-zero temperature to allow deterministic results)
+        # For temperature > 0, we still cache as it's useful for repeated prompts
+        cache_key = self._get_cache_key(prompt, system_prompt, max_tokens, temperature)
+        cached_content = self._get_cached_content(cache_key)
+        if cached_content is not None:
+            return cached_content
         
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
@@ -136,6 +199,9 @@ Keep responses concise and platform-appropriate."""
                             f"LLM returned empty content. Finish reason: {choice.get('finish_reason', 'unknown')}. "
                             f"Try increasing max_tokens or check if the model is loaded correctly."
                         )
+                    
+                    # Cache the result
+                    self._set_cached_content(cache_key, content)
                     
                     return content
                 else:

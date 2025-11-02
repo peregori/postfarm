@@ -7,17 +7,63 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import { showToast } from '@/lib/toast'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 export default function Drafts() {
   const [drafts, setDrafts] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedDraft, setSelectedDraft] = useState(null)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [draftToDelete, setDraftToDelete] = useState(null)
+  const [originalDraft, setOriginalDraft] = useState(null)
   const navigate = useNavigate()
 
   useEffect(() => {
     loadDrafts()
   }, [])
+
+  useEffect(() => {
+    if (selectedDraft) {
+      setOriginalDraft({ ...selectedDraft })
+    }
+  }, [selectedDraft?.id]) // Only when draft ID changes
+
+  // Auto-save drafts every 30 seconds when editing
+  useEffect(() => {
+    if (!selectedDraft || !originalDraft) return
+
+    const autoSave = async () => {
+      // Only save if content has changed
+      if (
+        selectedDraft.content !== originalDraft.content ||
+        selectedDraft.title !== originalDraft.title
+      ) {
+        try {
+          await draftsApi.update(selectedDraft.id, {
+            content: selectedDraft.content,
+            title: selectedDraft.title,
+          })
+          // Update original to reflect saved state
+          setOriginalDraft({ ...selectedDraft })
+        } catch (error) {
+          console.error('Auto-save failed:', error)
+          // Don't show toast for auto-save failures to avoid spam
+        }
+      }
+    }
+
+    const interval = setInterval(autoSave, 30000) // 30 seconds
+    return () => clearInterval(interval)
+  }, [selectedDraft, originalDraft])
 
   const loadDrafts = async () => {
     try {
@@ -30,18 +76,35 @@ export default function Drafts() {
     }
   }
 
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this draft?')) return
+  const handleDeleteClick = (id) => {
+    setDraftToDelete(id)
+    setShowDeleteDialog(true)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!draftToDelete) return
 
     try {
-      await draftsApi.delete(id)
-      setDrafts(drafts.filter((d) => d.id !== id))
-      if (selectedDraft?.id === id) {
+      await draftsApi.delete(draftToDelete)
+      showToast.success('Draft Deleted', 'Draft deleted successfully.')
+      
+      // Update state immediately
+      setDrafts(prevDrafts => prevDrafts.filter((d) => d.id !== draftToDelete))
+      
+      // Clear selection if deleted draft was selected
+      if (selectedDraft?.id === draftToDelete) {
         setSelectedDraft(null)
+        setOriginalDraft(null)
       }
+      
+      // Reload to ensure consistency
+      await loadDrafts()
     } catch (error) {
       console.error('Failed to delete draft:', error)
-      alert('Failed to delete draft.')
+      showToast.error('Delete Failed', error.response?.data?.detail || 'Failed to delete draft.')
+    } finally {
+      setShowDeleteDialog(false)
+      setDraftToDelete(null)
     }
   }
 
@@ -53,11 +116,12 @@ export default function Drafts() {
         content: selectedDraft.content,
         title: selectedDraft.title,
       })
-      alert('Draft saved!')
+      setOriginalDraft({ ...selectedDraft })
+      showToast.success('Draft Saved', 'Changes saved successfully.')
       loadDrafts()
     } catch (error) {
       console.error('Failed to save draft:', error)
-      alert('Failed to save draft.')
+      showToast.error('Save Failed', error.response?.data?.detail || 'Failed to save draft.')
     }
   }
 
@@ -132,7 +196,7 @@ export default function Drafts() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleDelete(draft.id)
+                          handleDeleteClick(draft.id)
                         }}
                         className="text-destructive hover:text-destructive/80"
                       >
@@ -210,6 +274,32 @@ export default function Drafts() {
           </Card>
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Draft</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this draft? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteDialog(false)
+                setDraftToDelete(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmDelete}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

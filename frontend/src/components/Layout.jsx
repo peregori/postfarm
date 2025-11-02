@@ -1,20 +1,15 @@
 import { Link, useLocation } from 'react-router-dom'
 import { 
-  FileText, 
-  Calendar, 
   Settings, 
-  Sparkles,
-  Power,
+  Calendar,
   Inbox as InboxIcon
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import ServerStatus from './ServerStatus'
 
 const navigation = [
   { name: 'Inbox', href: '/', icon: InboxIcon },
-  { name: 'Generate', href: '/generate', icon: Sparkles },
-  { name: 'Drafts', href: '/drafts', icon: FileText },
   { name: 'Schedule', href: '/schedule', icon: Calendar },
-  { name: 'Server', href: '/server', icon: Power },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
@@ -29,7 +24,7 @@ export default function Layout({ children }) {
         <div className="container mx-auto px-4">
           <div className="flex h-16 items-center justify-between gap-4">
             <h1 className="text-xl font-bold">HandPost</h1>
-            <nav className="flex items-center gap-1">
+            <nav className="flex items-center gap-2">
               {navigation.map((item) => {
                 const Icon = item.icon
                 const isActive = currentPath === item.href
@@ -49,6 +44,7 @@ export default function Layout({ children }) {
                   </Link>
                 )
               })}
+              <ServerStatus />
             </nav>
           </div>
         </div>
