@@ -46,6 +46,7 @@ export default function DraftEditor({
   const [pendingAiChange, setPendingAiChange] = useState(null) // { originalContent, newContent, changeType, selectionRange }
   const [promptHasMultipleLines, setPromptHasMultipleLines] = useState(false)
   const [editHasMultipleLines, setEditHasMultipleLines] = useState(false)
+  const [acceptedSegments, setAcceptedSegments] = useState(new Set()) // Track which diff segments are accepted
 
   useEffect(() => {
     if (draft) {
@@ -53,6 +54,7 @@ export default function DraftEditor({
       setContent(draftContent)
       setHasChanges(false)
       setPendingAiChange(null)
+      setAcceptedSegments(new Set())
     }
   }, [draft?.id])
 
@@ -62,6 +64,7 @@ export default function DraftEditor({
 
     const interval = setInterval(async () => {
       try {
+        // Auto-save the current content (not pending changes - user must accept those manually)
         await onSave({ content })
         setHasChanges(false)
       } catch (error) {
@@ -71,6 +74,40 @@ export default function DraftEditor({
 
     return () => clearInterval(interval)
   }, [content, hasChanges, autoSave, draft?.id, onSave])
+
+  // Global selection listener for diff content and preview
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      // Only handle if selection is within the editor container
+      const selection = window.getSelection()
+      if (!selection || selection.rangeCount === 0) {
+        // Small delay to allow selection to complete
+        setTimeout(() => {
+          const currentSelection = window.getSelection()
+          if (!currentSelection || currentSelection.rangeCount === 0) {
+            setSelectedText('')
+            setSelectionRange(null)
+            setFabPosition(null)
+          }
+        }, 100)
+        return
+      }
+
+      const range = selection.getRangeAt(0)
+      const editorContainer = document.querySelector('.editor-container')
+      
+      // Check if selection is within editor
+      if (editorContainer && editorContainer.contains(range.commonAncestorContainer)) {
+        // Delay to ensure selection is complete
+        setTimeout(() => {
+          handleTextSelection()
+        }, 50)
+      }
+    }
+
+    document.addEventListener('selectionchange', handleSelectionChange)
+    return () => document.removeEventListener('selectionchange', handleSelectionChange)
+  }, [pendingAiChange, acceptedSegments])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -179,30 +216,59 @@ export default function DraftEditor({
 
   // Text selection detection
   const handleTextSelection = () => {
-    if (!textareaRef.current) return
-    
-    const start = textareaRef.current.selectionStart
-    const end = textareaRef.current.selectionEnd
-    
-    if (end - start > 0) {
-      const selected = content.substring(start, end)
-      setSelectedText(selected)
-      setSelectionRange({ start, end })
-      
-      // Calculate FAB position
-      const textarea = textareaRef.current
-      const coordinates = getCaretCoordinates(textarea, end)
-      const rect = textarea.getBoundingClientRect()
-      const editorRect = textarea.closest('.editor-container')?.getBoundingClientRect() || rect
-      
-      setFabPosition({
-        x: coordinates.left - editorRect.left,
-        y: coordinates.top - editorRect.top + coordinates.height
-      })
-    } else {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) {
       setSelectedText('')
       setSelectionRange(null)
       setFabPosition(null)
+      return
+    }
+    
+    const selectedText = selection.toString().trim()
+    if (selectedText.length === 0) {
+      setSelectedText('')
+      setSelectionRange(null)
+      setFabPosition(null)
+      return
+    }
+    
+    // Get the selected text
+    setSelectedText(selectedText)
+    console.log('Selection detected:', selectedText.substring(0, 50))
+    
+    // For textarea, use existing logic (works for both normal text and after accepting AI changes)
+    if (textareaRef.current) {
+      const start = textareaRef.current.selectionStart
+      const end = textareaRef.current.selectionEnd
+      setSelectionRange({ start, end })
+      
+      // Calculate FAB position using viewport coordinates
+      const textarea = textareaRef.current
+      const coordinates = getCaretCoordinates(textarea, end)
+      const rect = textarea.getBoundingClientRect()
+      
+      // Use viewport coordinates for fixed positioning
+      setFabPosition({
+        x: rect.left + coordinates.left,
+        y: rect.top + coordinates.top + coordinates.height + 8
+      })
+    } else {
+      // For diff view, preview panel, or any other content, calculate position from selection range
+      try {
+        const range = selection.getRangeAt(0)
+        const rect = range.getBoundingClientRect()
+        // Use viewport coordinates for fixed positioning (works everywhere)
+        setFabPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.bottom + 8
+        })
+        // For diff content, we don't have precise start/end positions, so set a placeholder
+        setSelectionRange({ start: 0, end: selectedText.length })
+      } catch (error) {
+        // Fallback if range calculation fails
+        console.error('Error calculating FAB position:', error)
+        setFabPosition(null)
+      }
     }
   }
 
@@ -305,7 +371,7 @@ export default function DraftEditor({
       return
     }
 
-    if (!selectedText || !selectionRange) {
+    if (!selectedText || selectedText.trim().length === 0) {
       showToast.warning('No Selection', 'Please select text to edit.')
       return
     }
@@ -313,24 +379,121 @@ export default function DraftEditor({
     setIsGenerating(true)
     setShowEditPrompt(false)
     
-    const originalContent = content
-    
     try {
-      // Edit only the selected text
-      const response = await llmApi.edit(selectedText, editInstruction)
+      // Edit the selected text
+      const response = await llmApi.edit(selectedText.trim(), editInstruction)
       
       if (response?.edited_content) {
         const cleaned = cleanLLMArtifacts(response.edited_content)
         
-        // Replace selected portion with edited content
-        const newContent = 
-          content.substring(0, selectionRange.start) +
-          cleaned +
-          content.substring(selectionRange.end)
+        let originalContent, newContent
+        
+        // Determine which content to edit based on current state
+        // Always edit from the current content (what's actually in the editor)
+        let sourceContent = content
+        
+        // If we're in diff view, we want to edit from the newContent (what will become the content)
+        if (pendingAiChange) {
+          sourceContent = pendingAiChange.newContent
+        }
+        
+        if (selectionRange && selectionRange.start !== undefined && selectionRange.end !== undefined && textareaRef.current && !pendingAiChange) {
+          // Editing in normal textarea view with precise positions
+          originalContent = content
+          newContent = 
+            content.substring(0, selectionRange.start) +
+            cleaned +
+            content.substring(selectionRange.end)
+        } else {
+          // Editing from diff view, preview panel, or any other content - find and replace selected text
+          originalContent = sourceContent
+          const trimmedSelected = selectedText.trim()
+          
+          // Try to find the selected text in the source content
+          let index = sourceContent.indexOf(trimmedSelected)
+          
+          // If not found, try with normalized whitespace
+          if (index === -1) {
+            const normalizedSource = sourceContent.replace(/\s+/g, ' ')
+            const normalizedSelected = trimmedSelected.replace(/\s+/g, ' ')
+            const normalizedIndex = normalizedSource.indexOf(normalizedSelected)
+            if (normalizedIndex !== -1) {
+              // Find the actual position by counting characters
+              let charCount = 0
+              for (let i = 0; i < sourceContent.length; i++) {
+                if (sourceContent[i].match(/\s/)) {
+                  if (charCount >= normalizedIndex) {
+                    index = i
+                    break
+                  }
+                } else {
+                  charCount++
+                }
+                if (charCount >= normalizedIndex) {
+                  index = i
+                  break
+                }
+              }
+            }
+          }
+          
+          if (index !== -1) {
+            // Found match - replace it
+            newContent = 
+              sourceContent.substring(0, index) +
+              cleaned +
+              sourceContent.substring(index + trimmedSelected.length)
+          } else {
+            // Try case-insensitive search
+            const lowerSource = sourceContent.toLowerCase()
+            const lowerSelected = trimmedSelected.toLowerCase()
+            const lowerIndex = lowerSource.indexOf(lowerSelected)
+            
+            if (lowerIndex !== -1) {
+              // Found case-insensitive match - replace preserving original case
+              const beforeMatch = sourceContent.substring(0, lowerIndex)
+              const afterMatch = sourceContent.substring(lowerIndex + trimmedSelected.length)
+              newContent = beforeMatch + cleaned + afterMatch
+            } else {
+              // Couldn't find match - replace first occurrence or append
+              // Try to be smarter - find the closest match
+              const words = trimmedSelected.split(/\s+/)
+              if (words.length > 0) {
+                const firstWord = words[0]
+                const firstWordIndex = lowerSource.indexOf(firstWord.toLowerCase())
+                if (firstWordIndex !== -1) {
+                  // Found first word, try to replace from there
+                  const beforeMatch = sourceContent.substring(0, firstWordIndex)
+                  const remaining = sourceContent.substring(firstWordIndex)
+                  // Try to find where the selection ends
+                  const remainingLower = remaining.toLowerCase()
+                  const lastWord = words[words.length - 1]
+                  const lastWordIndex = remainingLower.indexOf(lastWord.toLowerCase())
+                  if (lastWordIndex !== -1) {
+                    const endIndex = firstWordIndex + lastWordIndex + lastWord.length
+                    newContent = sourceContent.substring(0, firstWordIndex) + cleaned + sourceContent.substring(endIndex)
+                  } else {
+                    newContent = beforeMatch + cleaned + remaining.substring(trimmedSelected.length)
+                  }
+                } else {
+                  // Fallback: append the edited content
+                  newContent = sourceContent + (sourceContent ? '\n\n' : '') + cleaned
+                }
+              } else {
+                newContent = sourceContent + (sourceContent ? '\n\n' : '') + cleaned
+              }
+            }
+          }
+        }
+        
+        // If there was already a pending change, preserve its original
+        if (pendingAiChange) {
+          originalContent = pendingAiChange.originalContent
+        }
         
         // Set as pending change
         const change = {
-          originalContent: originalContent,
+          originalContent: originalContent || content,
           newContent: newContent,
           changeType: 'edit-selection',
           selectionRange: selectionRange
@@ -342,7 +505,7 @@ export default function DraftEditor({
         setSelectedText('')
         setSelectionRange(null)
         setFabPosition(null)
-        showToast.success('Content Edited', 'Review the preview panel on the right and accept or discard.')
+        showToast.success('Content Edited', 'Review the changes and accept or discard.')
       }
     } catch (error) {
       console.error('Edit failed:', error)
@@ -355,9 +518,32 @@ export default function DraftEditor({
   const handleAcceptAiChange = () => {
     if (!pendingAiChange) return
     
-    setContent(pendingAiChange.newContent)
+    // Calculate diff segments for this pending change
+    const original = pendingAiChange.originalContent || ''
+    const modified = pendingAiChange.newContent || ''
+    const segments = calculateDiff(original, modified)
+    const addedSegments = segments.filter(s => s.type === 'added')
+    
+    // If there are individually accepted segments, build content from those
+    let finalContent = pendingAiChange.newContent
+    
+    if (segments.length > 0 && acceptedSegments.size > 0 && acceptedSegments.size < addedSegments.length) {
+      // Partial acceptance - build from accepted segments + equal parts
+      finalContent = segments
+        .filter((segment, index) => {
+          if (segment.type === 'equal') return true
+          if (segment.type === 'removed') return false
+          if (segment.type === 'added') return acceptedSegments.has(index)
+          return true
+        })
+        .map(s => s.text)
+        .join('\n')
+    }
+    
+    setContent(finalContent)
     setHasChanges(true)
     setPendingAiChange(null)
+    setAcceptedSegments(new Set())
     showToast.success('Changes Applied', 'AI changes have been applied to your draft.')
     
     // Clear selection if any
@@ -370,6 +556,7 @@ export default function DraftEditor({
     if (!pendingAiChange) return
     
     setPendingAiChange(null)
+    setAcceptedSegments(new Set())
     showToast.info('Changes Discarded', 'Original content preserved.')
     
     // Restore selection state if it was an edit
@@ -412,7 +599,15 @@ export default function DraftEditor({
 
   const handleSave = async () => {
     try {
-      await onSave({ content })
+      // If there's a pending AI change, accept it first before saving
+      let contentToSave = content
+      if (pendingAiChange) {
+        contentToSave = pendingAiChange.newContent
+        setContent(contentToSave)
+        setPendingAiChange(null)
+      }
+      
+      await onSave({ content: contentToSave })
       setHasChanges(false)
       showToast.success('Draft Saved', 'Changes saved successfully.')
     } catch (error) {
@@ -480,14 +675,6 @@ export default function DraftEditor({
               {linkedinLimits.count}/{linkedinLimits.limit}
             </Badge>
           </div>
-          
-          {/* Pending change indicator */}
-          {pendingAiChange && (
-            <Badge variant="default" className="bg-primary text-xs">
-              <Sparkles className="mr-1 h-3 w-3" />
-              Review changes
-            </Badge>
-          )}
         </div>
       </div>
 
@@ -497,58 +684,54 @@ export default function DraftEditor({
         {viewMode === 'split' && (
           <div className="flex flex-1 overflow-hidden min-h-0 relative">
             <div className="flex flex-col w-1/2 border-r overflow-hidden min-w-0 relative">
-              {/* Review Changes Header - Only show when there's a pending AI change */}
-              {pendingAiChange && (
-                <div className="p-3 border-b bg-muted/30 flex items-center justify-between shrink-0">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium">Review Changes</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleDiscardAiChange}
-                    >
-                      <XCircle className="mr-2 h-4 w-4" />
-                      Discard
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={handleAcceptAiChange}
-                    >
-                      <Check className="mr-2 h-4 w-4" />
-                      Accept
-                    </Button>
-                  </div>
-                </div>
-              )}
               <div className="flex-1 p-4 overflow-y-auto min-h-0 relative scrollbar-thin">
-                {/* AI Generate Button - Top Right, always visible */}
-                <div className="absolute top-2 right-2 z-20">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 px-2 text-xs"
-                  onClick={() => {
-                    if (showGeneratePrompt) {
-                      // Close if open
-                      closeGeneratePrompt()
-                    } else if (showEditPrompt) {
-                      // Switch from edit to generate
-                      closeEditPrompt()
-                      setShowGeneratePrompt(true)
-                    } else {
-                      // Open generate
-                      setShowGeneratePrompt(true)
-                    }
-                  }}
-                    title="Generate with AI (⌘K)"
-                  >
-                    <Sparkles className="h-3 w-3 mr-1" />
-                    AI
-                  </Button>
-                </div>
+                {/* Global Discard/Accept buttons - placed at top of diff content */}
+                {pendingAiChange && diffSegments.length > 0 && (
+                  <div className="mb-4 flex items-center justify-between pb-3 border-b border-border/50">
+                    <span className="text-xs text-muted-foreground font-medium">Review changes</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={handleDiscardAiChange}
+                        className="px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors rounded"
+                      >
+                        Discard all
+                      </button>
+                      <button
+                        onClick={handleAcceptAiChange}
+                        className="px-2.5 py-1 text-xs bg-primary text-primary-foreground hover:bg-primary/90 transition-colors rounded"
+                      >
+                        Confirm All
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {/* AI Generate Button - Hide when showing diff content to avoid overlap */}
+                {!pendingAiChange && (
+                  <div className="absolute top-2 right-2 z-20">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => {
+                        if (showGeneratePrompt) {
+                          // Close if open
+                          closeGeneratePrompt()
+                        } else if (showEditPrompt) {
+                          // Switch from edit to generate
+                          closeEditPrompt()
+                          setShowGeneratePrompt(true)
+                        } else {
+                          // Open generate
+                          setShowGeneratePrompt(true)
+                        }
+                      }}
+                      title="Generate with AI (⌘K)"
+                    >
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      AI
+                    </Button>
+                  </div>
+                )}
                 {showGeneratePrompt && (
                   <div className="mb-4">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
@@ -640,22 +823,89 @@ export default function DraftEditor({
                 )}
 
                 {pendingAiChange ? (
-                  <div className="space-y-1 text-sm">
+                  <div 
+                    className="space-y-1 text-sm"
+                    style={{ userSelect: 'text', WebkitUserSelect: 'text', MozUserSelect: 'text' }}
+                    onMouseUp={(e) => {
+                      // Small delay to ensure selection is complete
+                      setTimeout(() => {
+                        handleTextSelection()
+                      }, 100)
+                    }}
+                    onSelect={(e) => {
+                      setTimeout(() => {
+                        handleTextSelection()
+                      }, 100)
+                    }}
+                  >
                     {diffSegments.length > 0 ? (
-                      renderDiff(diffSegments)
+                      <div className="space-y-0.5" style={{ userSelect: 'text', WebkitUserSelect: 'text' }}>
+                        {diffSegments.map((segment, index) => {
+                          const key = `${segment.type}-${segment.line}-${index}`
+                          const isAccepted = acceptedSegments.has(index)
+                          const isRejected = segment.type === 'removed' || (segment.type === 'added' && !isAccepted)
+                          
+                          let className = ''
+                          let bgColor = ''
+                          if (segment.type === 'equal') {
+                            className = 'text-foreground whitespace-pre-wrap py-1'
+                          } else if (segment.type === 'added') {
+                            className = 'bg-green-500/5 border-l-[3px] border-green-500/40 pl-3 pr-3 py-1.5 whitespace-pre-wrap text-foreground rounded-r-sm'
+                            bgColor = isAccepted ? 'bg-green-500/10' : 'bg-green-500/5'
+                          } else if (segment.type === 'removed') {
+                            className = 'bg-red-500/5 border-l-[3px] border-red-500/40 pl-3 pr-3 py-1.5 whitespace-pre-wrap text-foreground/50 line-through rounded-r-sm'
+                          }
+                          
+                          return (
+                            <div 
+                              key={key} 
+                              className={`group relative flex items-start gap-2 ${segment.type === 'added' ? '' : ''}`}
+                            >
+                              {segment.type === 'added' && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    const newAccepted = new Set(acceptedSegments)
+                                    if (newAccepted.has(index)) {
+                                      newAccepted.delete(index)
+                                    } else {
+                                      newAccepted.add(index)
+                                    }
+                                    setAcceptedSegments(newAccepted)
+                                  }}
+                                  className={`shrink-0 w-6 h-6 flex items-center justify-center text-[10px] rounded transition-colors mt-0.5 ${
+                                    isAccepted 
+                                      ? 'bg-primary text-primary-foreground' 
+                                      : 'bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary opacity-0 group-hover:opacity-100'
+                                  }`}
+                                  title={isAccepted ? 'Remove' : 'Keep this line'}
+                                >
+                                  {isAccepted ? '✓' : '○'}
+                                </button>
+                              )}
+                              <div 
+                                className={`flex-1 min-w-0 ${className} ${bgColor}`}
+                                style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
+                              >
+                                {segment.text}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="space-y-3 select-text">
                         {pendingAiChange.originalContent && (
                           <div>
                             <div className="text-xs font-medium text-muted-foreground mb-1.5">Original:</div>
-                            <div className="whitespace-pre-wrap text-foreground/50 line-through bg-red-500/5 border-l-[3px] border-red-500/40 pl-3 py-1.5 rounded-sm">
+                            <div className="whitespace-pre-wrap text-foreground/50 line-through bg-red-500/5 border-l-[3px] border-red-500/40 pl-3 py-1.5 rounded-sm select-text">
                               {pendingAiChange.originalContent}
                             </div>
                           </div>
                         )}
                         <div>
                           <div className="text-xs font-medium text-muted-foreground mb-1.5">New:</div>
-                          <div className="whitespace-pre-wrap text-foreground bg-green-500/5 border-l-[3px] border-green-500/40 pl-3 py-1.5 rounded-sm">
+                          <div className="whitespace-pre-wrap text-foreground bg-green-500/5 border-l-[3px] border-green-500/40 pl-3 py-1.5 rounded-sm select-text">
                             {pendingAiChange.newContent}
                           </div>
                         </div>
@@ -710,37 +960,22 @@ export default function DraftEditor({
                   />
                 )}
                 
-                {/* Floating Action Button for Selection */}
-                {fabPosition && selectedText && selectedText.length > 0 && !showEditPrompt && !pendingAiChange && !showGeneratePrompt && (
-                  <div
-                    className="absolute z-10 transition-opacity duration-200"
-                    style={{
-                      left: `${fabPosition.x}px`,
-                      top: `${fabPosition.y}px`,
-                      transform: 'translate(-50%, 8px)'
-                    }}
-                  >
-                    <Button
-                      size="sm"
-                      className="h-8 w-8 rounded-full p-0 shadow-lg"
-                      onClick={() => {
-                        if (selectedText && selectedText.length > 0) {
-                          setShowGeneratePrompt(false)
-                          setShowEditPrompt(true)
-                        }
-                      }}
-                      title="Edit selected text with AI"
-                    >
-                      <Sparkles className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
               </div>
             </div>
 
             <Separator orientation="vertical" />
             <div className="w-1/2 border-l flex flex-col" style={{ height: '100%', minHeight: 0 }}>
-              <div className="p-4 overflow-y-auto flex-1 scrollbar-thin" style={{ height: '100%', maxHeight: '100%' }}>
+              <div 
+                className="p-4 overflow-y-auto flex-1 scrollbar-thin select-text" 
+                style={{ height: '100%', maxHeight: '100%' }}
+                onMouseUp={(e) => {
+                  // Enable text selection in preview panel
+                  setTimeout(() => handleTextSelection(), 10)
+                }}
+                onSelect={(e) => {
+                  setTimeout(() => handleTextSelection(), 10)
+                }}
+              >
                 {isGenerating ? (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
@@ -751,7 +986,7 @@ export default function DraftEditor({
                     </div>
                   </div>
                 ) : (
-                  <div className="whitespace-pre-wrap text-foreground text-sm leading-relaxed font-normal break-words">
+                  <div className="whitespace-pre-wrap text-foreground text-sm leading-relaxed font-normal break-words select-text">
                     {previewContent || <span className="text-muted-foreground italic">No content to preview</span>}
                   </div>
                 )}
@@ -761,33 +996,57 @@ export default function DraftEditor({
         )}
 
         {viewMode === 'preview' && (
-          <div className="h-full overflow-y-auto p-6">
-            {pendingAiChange && (
-              <div className="mb-4 pb-3 border-b flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  <span className="font-medium">Review Changes</span>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={handleDiscardAiChange}>
-                    <XCircle className="mr-2 h-4 w-4" />
-                    Discard
-                  </Button>
-                  <Button size="sm" onClick={handleAcceptAiChange}>
-                    <Check className="mr-2 h-4 w-4" />
-                    Accept
-                  </Button>
-                </div>
-              </div>
-            )}
-            <div className="prose prose-lg dark:prose-invert max-w-none mx-auto">
-              <div className="whitespace-pre-wrap text-foreground leading-relaxed">
+          <div 
+            className="h-full overflow-y-auto p-6 select-text"
+            onMouseUp={(e) => {
+              // Enable text selection in preview mode
+              setTimeout(() => handleTextSelection(), 10)
+            }}
+            onSelect={(e) => {
+              setTimeout(() => handleTextSelection(), 10)
+            }}
+          >
+            <div className="prose prose-lg dark:prose-invert max-w-none mx-auto select-text">
+              <div className="whitespace-pre-wrap text-foreground leading-relaxed select-text">
                 {previewContent || <span className="text-muted-foreground italic">No content to preview</span>}
               </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* Floating Action Button for Selection - Works everywhere text can be selected */}
+      {fabPosition && selectedText && selectedText.trim().length > 0 && !showEditPrompt && !showGeneratePrompt && (
+        <div
+          className="fixed z-50 transition-opacity duration-200 pointer-events-auto"
+          style={{
+            left: `${fabPosition.x}px`,
+            top: `${fabPosition.y}px`,
+            transform: 'translate(-50%, 8px)'
+          }}
+          onClick={(e) => {
+            e.stopPropagation()
+          }}
+        >
+          <Button
+            size="sm"
+            className="h-8 w-8 rounded-full p-0 shadow-lg bg-primary hover:bg-primary/90 pointer-events-auto"
+            onClick={(e) => {
+              e.stopPropagation()
+              e.preventDefault()
+              console.log('Edit button clicked, selectedText:', selectedText.substring(0, 50))
+              if (selectedText && selectedText.trim().length > 0) {
+                setShowGeneratePrompt(false)
+                setShowEditPrompt(true)
+                console.log('Edit prompt should be shown')
+              }
+            }}
+            title="Edit selected text with AI"
+          >
+            <Sparkles className="h-4 w-4 text-primary-foreground" />
+          </Button>
+        </div>
+      )}
 
       {/* Actions Bar */}
       {showActions && (
@@ -799,46 +1058,50 @@ export default function DraftEditor({
               </Badge>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleSave}
-              disabled={!content.trim()}
-            >
-              <Save className="mr-2 h-4 w-4 shrink-0" />
-              Save
-            </Button>
-            {onPostNow && (
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handlePostNow}
-                disabled={!content.trim()}
-              >
-                <Send className="mr-2 h-4 w-4 shrink-0" />
-                Post Now
-              </Button>
-            )}
-            {onAccept && (
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleAccept}
-                disabled={!content.trim()}
-              >
-                Accept
-              </Button>
-            )}
-            {onDiscard && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDiscard}
-              >
-                <X className="mr-2 h-4 w-4 shrink-0" />
-                Discard
-              </Button>
+          <div className="flex items-center gap-1.5">
+            {!pendingAiChange && (
+              <>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={!content.trim()}
+                >
+                  <Save className="mr-2 h-4 w-4 shrink-0" />
+                  Save
+                </Button>
+                {onPostNow && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={handlePostNow}
+                    disabled={!content.trim()}
+                  >
+                    <Send className="mr-2 h-4 w-4 shrink-0" />
+                    Post Now
+                  </Button>
+                )}
+                {onAccept && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={handleAccept}
+                    disabled={!content.trim()}
+                  >
+                    Accept
+                  </Button>
+                )}
+                {onDiscard && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDiscard}
+                  >
+                    <X className="mr-2 h-4 w-4 shrink-0" />
+                    Discard
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </div>
