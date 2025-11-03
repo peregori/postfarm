@@ -226,7 +226,7 @@ export default function Inbox() {
                 placeholder="Search draft contents..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 h-9 text-base"
+                className="pl-10 h-9 text-base focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none"
               />
             </div>
           </div>
@@ -252,7 +252,7 @@ export default function Inbox() {
             {/* Sort Filter */}
             <div className="mb-4">
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-full h-8 text-xs border-muted/50 bg-muted/20 hover:bg-muted/40 focus:bg-background transition-all duration-200">
+                <SelectTrigger className="w-full h-8 text-xs border-muted/50 bg-muted/20 hover:bg-muted/40 focus:bg-background focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-muted/50 transition-all duration-200">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
