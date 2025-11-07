@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
     scheduler_service.stop()
 
 app = FastAPI(
-    title="HandPost - Content Management & Scheduling",
+    title="PostFarm - Content Management & Scheduling",
     description="Local content generation and scheduling app with llama.cpp",
     version="1.0.0",
     lifespan=lifespan
@@ -44,7 +44,7 @@ app.include_router(server.router, prefix="/api/server", tags=["Server"])
 
 @app.get("/")
 async def root():
-    return {"message": "HandPost API", "version": "1.0.0"}
+    return {"message": "PostFarm API", "version": "1.0.0"}
 
 @app.get("/api/health")
 async def health_check():

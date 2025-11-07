@@ -52,7 +52,7 @@ pip install -r requirements.txt
 cat > .env << EOF
 LLAMA_CPP_SERVER_URL=http://localhost:8080
 LLAMA_MODEL_NAME=default
-DATABASE_URL=sqlite:///./handpost.db
+DATABASE_URL=sqlite:///./postfarm.db
 EOF
 
 # Start server

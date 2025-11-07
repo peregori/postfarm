@@ -1,6 +1,6 @@
-# HandPost - Local Content Management & Scheduling
+# PostFarm - Local Content Management & Scheduling
 
-A full-stack local application for generating, editing, and scheduling social media content using local GGUF LLMs with llama.cpp. Inspired by LangChain's AgentInbox, HandPost provides a modern interface for content creation and management.
+A full-stack local application for generating, editing, and scheduling social media content using local GGUF LLMs with llama.cpp. Inspired by LangChain's AgentInbox, PostFarm provides a modern interface for content creation and management.
 
 ## Features
 
@@ -80,7 +80,7 @@ pip install -r requirements.txt
 cat > .env << EOF
 LLAMA_CPP_SERVER_URL=http://localhost:8080
 LLAMA_MODEL_NAME=default
-DATABASE_URL=sqlite:///./handpost.db
+DATABASE_URL=sqlite:///./postfarm.db
 EOF
 
 # Run the server
@@ -176,7 +176,7 @@ Create a `.env` file in the `backend` directory:
 ```env
 LLAMA_CPP_SERVER_URL=http://localhost:8080
 LLAMA_MODEL_NAME=default
-DATABASE_URL=sqlite:///./handpost.db
+DATABASE_URL=sqlite:///./postfarm.db
 ```
 
 ### Model Detection
@@ -213,10 +213,10 @@ npm run dev
 
 ### Database
 
-The database is SQLite located at `backend/handpost.db`. You can inspect it with any SQLite tool:
+The database is SQLite located at `backend/postfarm.db`. You can inspect it with any SQLite tool:
 
 ```bash
-sqlite3 backend/handpost.db
+sqlite3 backend/postfarm.db
 ```
 
 ## Troubleshooting

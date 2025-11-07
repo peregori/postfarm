@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     LLAMA_MODEL_NAME: str = "default"
     
     # Database
-    DATABASE_URL: str = "sqlite:///./handpost.db"
+    DATABASE_URL: str = "sqlite:///./postfarm.db"
     
     # API Settings
     API_PREFIX: str = "/api"

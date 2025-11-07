@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 import os
 
 # Database URL - using SQLite for local development
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./handpost.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./postfarm.db")
 
 engine = create_engine(
     DATABASE_URL,

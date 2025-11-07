@@ -1,7 +1,7 @@
 #!/bin/bash
-# Startup script for HandPost backend
+# Startup script for PostFarm backend
 
-echo "Starting HandPost Backend..."
+echo "Starting PostFarm Backend..."
 
 # Check if virtual environment exists
 if [ ! -d "venv" ]; then
@@ -25,7 +25,7 @@ if [ ! -f ".env" ]; then
     cat > .env << EOF
 LLAMA_CPP_SERVER_URL=http://localhost:8080
 LLAMA_MODEL_NAME=default
-DATABASE_URL=sqlite:///./handpost.db
+DATABASE_URL=sqlite:///./postfarm.db
 EOF
 fi
 

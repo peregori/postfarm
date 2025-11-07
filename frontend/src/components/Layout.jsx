@@ -23,7 +23,7 @@ export default function Layout({ children }) {
       <header className="flex-shrink-0 z-30 w-full border-b bg-background">
         <div className="container mx-auto px-4">
           <div className="flex h-16 items-center justify-between gap-4">
-            <h1 className="text-lg font-bold">HandPost</h1>
+            <h1 className="text-lg font-bold">PostFarm</h1>
             <nav className="flex items-center gap-2">
               {navigation.map((item) => {
                 const Icon = item.icon
