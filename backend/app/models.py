@@ -95,3 +95,35 @@ class PlatformConfig(Base):
             })
         return data
 
+class AIProviderConfig(Base):
+    __tablename__ = "ai_provider_configs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    provider_name = Column(String(50), nullable=False, unique=True)
+    config_json = Column(Text, nullable=True)  # JSON string with provider-specific config
+    is_active = Column(Boolean, default=False)  # Only one provider should be active
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    def to_dict(self, include_secrets=False):
+        import json
+        config = {}
+        if self.config_json:
+            try:
+                config = json.loads(self.config_json)
+                # Hide API keys unless explicitly requested
+                if not include_secrets:
+                    if 'api_key' in config:
+                        config['api_key'] = '***' if config['api_key'] else None
+            except:
+                pass
+        
+        return {
+            "id": self.id,
+            "provider_name": self.provider_name,
+            "config": config,
+            "is_active": self.is_active,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+

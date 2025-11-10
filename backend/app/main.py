@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 import os
 
 from app.database import init_db
-from app.routers import posts, drafts, scheduler, llm, platforms, models, server
+from app.routers import posts, drafts, scheduler, llm, platforms, models, server, providers
 from app.services.scheduler_service import scheduler_service
 
 @asynccontextmanager
@@ -35,6 +35,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(llm.router, prefix="/api/llm", tags=["LLM"])
+app.include_router(providers.router, prefix="/api/providers", tags=["Providers"])
 app.include_router(posts.router, prefix="/api/posts", tags=["Posts"])
 app.include_router(drafts.router, prefix="/api/drafts", tags=["Drafts"])
 app.include_router(scheduler.router, prefix="/api/scheduler", tags=["Scheduler"])

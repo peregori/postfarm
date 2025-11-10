@@ -166,5 +166,42 @@ export const serverApi = {
   },
 }
 
+// Providers API
+export const providersApi = {
+  list: async () => {
+    const response = await client.get('/providers/')
+    return response.data
+  },
+  
+  getCurrent: async () => {
+    const response = await client.get('/providers/current')
+    return response.data
+  },
+  
+  select: async (providerName) => {
+    const response = await client.post('/providers/select', {
+      provider_name: providerName,
+    })
+    return response.data
+  },
+  
+  getConfig: async (providerName) => {
+    const response = await client.get(`/providers/${providerName}/config`)
+    return response.data
+  },
+  
+  updateConfig: async (providerName, config) => {
+    const response = await client.put(`/providers/${providerName}/config`, {
+      config,
+    })
+    return response.data
+  },
+  
+  test: async (providerName) => {
+    const response = await client.post(`/providers/${providerName}/test`)
+    return response.data
+  },
+}
+
 export default client
 

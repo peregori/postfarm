@@ -1,10 +1,15 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
+from sqlalchemy.orm import Session
 from app.services.llm_service import LLMService
+from app.database import get_db
 
 router = APIRouter()
-llm_service = LLMService()
+
+def get_llm_service(db: Session = Depends(get_db)) -> LLMService:
+    """Dependency to get LLMService with database session"""
+    return LLMService(db=db)
 
 class GenerateRequest(BaseModel):
     prompt: str
@@ -26,8 +31,8 @@ class EditResponse(BaseModel):
     original_content: str
 
 @router.post("/generate", response_model=GenerateResponse)
-async def generate_content(request: GenerateRequest):
-    """Generate content from a prompt using local LLM"""
+async def generate_content(request: GenerateRequest, llm_service: LLMService = Depends(get_llm_service)):
+    """Generate content from a prompt using configured AI provider"""
     try:
         content = await llm_service.generate_content(
             prompt=request.prompt,
@@ -39,7 +44,7 @@ async def generate_content(request: GenerateRequest):
     except ConnectionError as e:
         raise HTTPException(
             status_code=503,
-            detail=f"LLM server not available: {str(e)}"
+            detail=f"AI provider not available: {str(e)}"
         )
     except Exception as e:
         raise HTTPException(
@@ -48,7 +53,7 @@ async def generate_content(request: GenerateRequest):
         )
 
 @router.post("/edit", response_model=EditResponse)
-async def edit_content(request: EditRequest):
+async def edit_content(request: EditRequest, llm_service: LLMService = Depends(get_llm_service)):
     """Edit existing content based on instructions"""
     try:
         edited_content = await llm_service.edit_content(
@@ -63,7 +68,7 @@ async def edit_content(request: EditRequest):
     except ConnectionError as e:
         raise HTTPException(
             status_code=503,
-            detail=f"LLM server not available: {str(e)}"
+            detail=f"AI provider not available: {str(e)}"
         )
     except Exception as e:
         raise HTTPException(
@@ -72,14 +77,19 @@ async def edit_content(request: EditRequest):
         )
 
 @router.get("/health")
-async def llm_health():
-    """Check LLM server health"""
+async def llm_health(llm_service: LLMService = Depends(get_llm_service)):
+    """Check AI provider health"""
     is_healthy = await llm_service.check_server_health()
     if is_healthy:
-        return {"status": "healthy", "server_url": llm_service.base_url}
+        provider = llm_service._get_provider()
+        return {
+            "status": "healthy",
+            "provider": provider.get_provider_name(),
+            "display_name": provider.get_display_name()
+        }
     else:
         raise HTTPException(
             status_code=503,
-            detail="LLM server is not available"
+            detail="AI provider is not available"
         )
 

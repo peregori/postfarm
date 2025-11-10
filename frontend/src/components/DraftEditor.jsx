@@ -706,13 +706,13 @@ export default function DraftEditor({
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={handleDiscardAiChange}
-                        className="px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors rounded"
+                        className="px-2.5 py-1 text-xs bg-red-700 hover:bg-red-800 text-white transition-colors rounded"
                       >
                         Discard all
                       </button>
                       <button
                         onClick={handleAcceptAiChange}
-                        className="px-2.5 py-1 text-xs bg-primary text-primary-foreground hover:bg-primary/90 transition-colors rounded"
+                        className="px-2.5 py-1 text-xs bg-green-700 hover:bg-green-800 text-white transition-colors rounded"
                       >
                         Confirm All
                       </button>

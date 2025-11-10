@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     # LLM Configuration
     LLAMA_CPP_SERVER_URL: str = "http://localhost:8080"
     LLAMA_MODEL_NAME: str = "default"
+    AI_PROVIDER: str = "llamacpp"  # Default provider
     
     # Database
     DATABASE_URL: str = "sqlite:///./postfarm.db"

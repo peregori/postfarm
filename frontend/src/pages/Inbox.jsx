@@ -281,7 +281,7 @@ export default function Inbox() {
           <div className="flex items-center shrink-0">
             <Button
               onClick={handleCreateNew}
-              className="h-9 px-3 gap-2"
+              className="h-9 px-3 gap-2 bg-green-700 hover:bg-green-800 text-white"
               variant="default"
             >
               <Plus className="h-4 w-4" />

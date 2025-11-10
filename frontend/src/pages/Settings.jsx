@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { CheckCircle, XCircle, Database, ExternalLink, Eye, EyeOff, Power, Settings as SettingsIcon, Sparkles, ArrowRight } from 'lucide-react'
-import { platformsApi, modelsApi } from '../api/client'
+import { CheckCircle, XCircle, Database, ExternalLink, Eye, EyeOff, Power, Settings as SettingsIcon, Sparkles, ArrowRight, Loader2 } from 'lucide-react'
+import { platformsApi, modelsApi, providersApi } from '../api/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -25,10 +25,15 @@ export default function Settings() {
   const [editingPlatform, setEditingPlatform] = useState(null)
   const [showPasswords, setShowPasswords] = useState({})
   const [platformConfigs, setPlatformConfigs] = useState({})
+  const [providers, setProviders] = useState([])
+  const [currentProvider, setCurrentProvider] = useState(null)
+  const [providerConfigs, setProviderConfigs] = useState({})
+  const [testingProvider, setTestingProvider] = useState(null)
 
   useEffect(() => {
     loadPlatforms()
     loadModels()
+    loadProviders()
     // Load saved model from localStorage
     const savedModel = localStorage.getItem('llama_selected_model')
     if (savedModel) {
@@ -104,6 +109,67 @@ export default function Settings() {
       await loadAllPlatformConfigs(data)
     } catch (error) {
       console.error('Failed to load platforms:', error)
+    }
+  }
+
+  const loadProviders = async () => {
+    try {
+      const [providersData, currentData] = await Promise.all([
+        providersApi.list(),
+        providersApi.getCurrent()
+      ])
+      setProviders(providersData.providers || [])
+      setCurrentProvider(currentData)
+      
+      // Load configs for all providers
+      for (const provider of providersData.providers || []) {
+        try {
+          const config = await providersApi.getConfig(provider.name)
+          setProviderConfigs(prev => ({
+            ...prev,
+            [provider.name]: config.config || {}
+          }))
+        } catch (error) {
+          console.error(`Failed to load config for ${provider.name}:`, error)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load providers:', error)
+    }
+  }
+
+  const handleSelectProvider = async (providerName) => {
+    try {
+      await providersApi.select(providerName)
+      showToast.success('Provider Selected', `${providerName} is now active`)
+      await loadProviders()
+    } catch (error) {
+      showToast.error('Failed to Select Provider', error.response?.data?.detail || 'Failed to select provider')
+    }
+  }
+
+  const handleUpdateProviderConfig = async (providerName, config) => {
+    try {
+      await providersApi.updateConfig(providerName, config)
+      setProviderConfigs(prev => ({
+        ...prev,
+        [providerName]: config
+      }))
+      showToast.success('Configuration Saved', `${providerName} configuration updated`)
+    } catch (error) {
+      showToast.error('Failed to Save', error.response?.data?.detail || 'Failed to save configuration')
+    }
+  }
+
+  const handleTestProvider = async (providerName) => {
+    setTestingProvider(providerName)
+    try {
+      const result = await providersApi.test(providerName)
+      showToast.success('Connection Test Passed', result.message)
+    } catch (error) {
+      showToast.error('Connection Test Failed', error.response?.data?.detail || 'Test failed')
+    } finally {
+      setTestingProvider(null)
     }
   }
 
@@ -193,11 +259,179 @@ export default function Settings() {
           </p>
         </div>
 
+        {/* AI Provider Selection */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold">AI Provider</h2>
+          </div>
+          <Card>
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Select AI Provider
+                  </label>
+                  <select
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    value={currentProvider?.provider_name || 'llamacpp'}
+                    onChange={(e) => handleSelectProvider(e.target.value)}
+                  >
+                    {providers.map((provider) => (
+                      <option key={provider.name} value={provider.name}>
+                        {provider.display_name} - {provider.description}
+                      </option>
+                    ))}
+                  </select>
+                  {currentProvider && (
+                    <div className="flex items-center gap-2 mt-2 text-sm">
+                      <Badge variant={currentProvider.is_active ? "default" : "secondary"}>
+                        {currentProvider.is_active ? "Active" : "Default"}
+                      </Badge>
+                      <span className="text-muted-foreground">
+                        {currentProvider.display_name}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Provider-specific configuration */}
+                {currentProvider && (
+                  <div className="pt-4 border-t space-y-4">
+                    {currentProvider.provider_name === 'openai' && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">
+                            API Key
+                          </label>
+                          <div className="flex gap-2">
+                            <Input
+                              type={showPasswords.openai ? "text" : "password"}
+                              value={providerConfigs.openai?.api_key || ''}
+                              onChange={(e) => handleUpdateProviderConfig('openai', {
+                                ...providerConfigs.openai,
+                                api_key: e.target.value
+                              })}
+                              placeholder="sk-..."
+                              className="flex-1"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setShowPasswords(prev => ({ ...prev, openai: !prev.openai }))}
+                            >
+                              {showPasswords.openai ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </Button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">
+                            Model
+                          </label>
+                          <select
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            value={providerConfigs.openai?.model || 'gpt-4o-mini'}
+                            onChange={(e) => handleUpdateProviderConfig('openai', {
+                              ...providerConfigs.openai,
+                              model: e.target.value
+                            })}
+                          >
+                            <option value="gpt-4o-mini">GPT-4o Mini</option>
+                            <option value="gpt-4o">GPT-4o</option>
+                            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                          </select>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleTestProvider('openai')}
+                          disabled={testingProvider === 'openai'}
+                        >
+                          {testingProvider === 'openai' ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : null}
+                          Test Connection
+                        </Button>
+                      </div>
+                    )}
+
+                    {currentProvider.provider_name === 'anthropic' && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">
+                            API Key
+                          </label>
+                          <div className="flex gap-2">
+                            <Input
+                              type={showPasswords.anthropic ? "text" : "password"}
+                              value={providerConfigs.anthropic?.api_key || ''}
+                              onChange={(e) => handleUpdateProviderConfig('anthropic', {
+                                ...providerConfigs.anthropic,
+                                api_key: e.target.value
+                              })}
+                              placeholder="sk-ant-..."
+                              className="flex-1"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setShowPasswords(prev => ({ ...prev, anthropic: !prev.anthropic }))}
+                            >
+                              {showPasswords.anthropic ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </Button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">
+                            Model
+                          </label>
+                          <select
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            value={providerConfigs.anthropic?.model || 'claude-3-5-sonnet-20241022'}
+                            onChange={(e) => handleUpdateProviderConfig('anthropic', {
+                              ...providerConfigs.anthropic,
+                              model: e.target.value
+                            })}
+                          >
+                            <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                            <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                            <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
+                          </select>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleTestProvider('anthropic')}
+                          disabled={testingProvider === 'anthropic'}
+                        >
+                          {testingProvider === 'anthropic' ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : null}
+                          Test Connection
+                        </Button>
+                      </div>
+                    )}
+
+                    {currentProvider.provider_name === 'llamacpp' && (
+                      <div className="text-xs text-muted-foreground">
+                        <p>Llama.cpp uses local server configuration. Configure the server URL and model in environment variables or use the model selector below.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* AI Model Section - Prominently Featured */}
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
             <h2 className="text-lg font-semibold">AI Model Configuration</h2>
+            {currentProvider?.provider_name === 'llamacpp' && (
+              <Badge variant="secondary" className="text-xs">Llama.cpp only</Badge>
+            )}
           </div>
           <Card>
             <CardContent className="p-6">

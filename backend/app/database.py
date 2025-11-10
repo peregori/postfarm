@@ -22,6 +22,6 @@ def get_db():
         db.close()
 
 def init_db():
-    from app.models import Draft, ScheduledPost, PlatformConfig
+    from app.models import Draft, ScheduledPost, PlatformConfig, AIProviderConfig
     Base.metadata.create_all(bind=engine)
 

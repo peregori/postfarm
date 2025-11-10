@@ -1,27 +1,40 @@
 import { useState, useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
-import { serverApi } from '../api/client'
+import { serverApi, providersApi, llmApi } from '../api/client'
 import { Button } from '@/components/ui/button'
 import { showToast } from '@/lib/toast'
 
 export default function ServerStatus() {
   const [status, setStatus] = useState(null)
+  const [provider, setProvider] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
 
   useEffect(() => {
     loadStatus()
+    loadProvider()
     // Poll status every 5 seconds
-    const interval = setInterval(loadStatus, 5000)
+    const interval = setInterval(() => {
+      loadStatus()
+      loadProvider()
+    }, 5000)
     return () => clearInterval(interval)
   }, [])
 
   const loadStatus = async () => {
     try {
-      const data = await serverApi.getStatus()
-      setStatus(data)
+      const data = await llmApi.health()
+      setStatus({ running: true, provider: data.provider, display_name: data.display_name })
     } catch (error) {
-      console.error('Failed to load server status:', error)
-      setStatus({ running: false, url: 'http://localhost:8080', port: 8080 })
+      setStatus({ running: false })
+    }
+  }
+
+  const loadProvider = async () => {
+    try {
+      const data = await providersApi.getCurrent()
+      setProvider(data)
+    } catch (error) {
+      console.error('Failed to load provider:', error)
     }
   }
 
@@ -86,6 +99,8 @@ export default function ServerStatus() {
     )
   }
 
+  const providerName = provider?.display_name || status?.display_name || 'AI'
+
   return (
     <Button
       variant={status.running ? "default" : "outline"}
@@ -97,12 +112,12 @@ export default function ServerStatus() {
       {status.running ? (
         <>
           <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse shrink-0" />
-          <span className="text-xs">AI Ready</span>
+          <span className="text-xs">{providerName} Ready</span>
         </>
       ) : (
         <>
           <div className="h-2 w-2 rounded-full bg-muted-foreground shrink-0" />
-          <span className="text-xs">Connect AI</span>
+          <span className="text-xs">Connect {providerName}</span>
         </>
       )}
       {actionLoading && (
