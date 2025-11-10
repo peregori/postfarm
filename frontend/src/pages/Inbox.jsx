@@ -7,12 +7,14 @@ import {
   Send,
   X,
   Twitter,
-  Linkedin
+  Linkedin,
+  Sparkles
 } from 'lucide-react'
 import { draftsApi, platformsApi } from '../api/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
@@ -147,6 +149,40 @@ export default function Inbox() {
     setShowDeleteDialog(true)
   }
 
+  const handleConfirm = async ({ content }) => {
+    if (!selectedDraft?.id) {
+      showToast.warning('Draft Required', 'Please save the draft first.')
+      return
+    }
+
+    try {
+      // Get current tags and add "confirmed" if not already present
+      const currentTags = selectedDraft.tags || []
+      const hasConfirmedTag = currentTags.includes('confirmed')
+      
+      if (!hasConfirmedTag) {
+        const updatedTags = [...currentTags, 'confirmed']
+        const updated = await draftsApi.update(selectedDraft.id, { 
+          content,
+          tags: updatedTags 
+        })
+        
+        // Remove confirmed draft from inbox list
+        setDrafts(drafts.filter(d => d.id !== updated.id))
+        setSelectedDraft(null)
+        showToast.success('Confirmed', 'Ready for scheduling')
+      } else {
+        // Just update content if already confirmed
+        const updated = await draftsApi.update(selectedDraft.id, { content })
+        setDrafts(drafts.filter(d => d.id !== updated.id))
+        setSelectedDraft(null)
+      }
+    } catch (error) {
+      console.error('Confirm failed:', error)
+      showToast.error('Failed', 'Could not confirm draft')
+    }
+  }
+
   const handlePostNow = async () => {
     if (!selectedDraft?.content?.trim()) {
       showToast.warning('Content Required', 'Please add content before posting.')
@@ -168,12 +204,22 @@ export default function Inbox() {
     }
   }
 
-  const filteredDrafts = drafts.filter((draft) => {
-    const query = searchQuery.toLowerCase()
-    const matchesSearch = draft.content?.toLowerCase().includes(query)
-    
-    return matchesSearch
-  }).sort((a, b) => {
+  const filteredDrafts = drafts
+    .filter((draft) => {
+      // Exclude confirmed drafts from inbox
+      const tags = draft.tags || []
+      const isConfirmed = tags.includes('confirmed')
+      if (isConfirmed) return false
+      
+      // Filter by search query if provided
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase()
+        return draft.content?.toLowerCase().includes(query)
+      }
+      
+      return true
+    })
+    .sort((a, b) => {
     if (sortBy === 'oldest') {
       return new Date(a.created_at) - new Date(b.created_at)
     } else if (sortBy === 'alphabetical') {
@@ -205,28 +251,28 @@ export default function Inbox() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)]">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="border-b bg-background">
+      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex h-16 items-center gap-4 px-6">
           {/* Left: Title and Draft Count */}
           <div className="flex items-center gap-3 shrink-0">
-            <h2 className="text-base font-semibold">Inbox</h2>
-            <Badge variant="secondary" className="h-7 px-2.5 text-xs font-medium">
+            <h2 className="text-lg font-semibold">Inbox</h2>
+            <Badge variant="secondary" className="h-6 px-2 text-xs font-medium">
               {filteredDrafts.length}
             </Badge>
           </div>
 
           {/* Center: Search Bar */}
-          <div className="flex-1 flex justify-center">
-            <div className="relative w-full max-w-2xl">
-              <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground shrink-0" />
+          <div className="flex-1 flex justify-center max-w-xl mx-auto">
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground shrink-0" />
               <Input
                 type="text"
-                placeholder="Search draft contents..."
+                placeholder="Search drafts..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 h-9 text-base focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none"
+                className="pl-9 h-9 text-sm bg-muted/50 border-muted focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
           </div>
@@ -235,10 +281,11 @@ export default function Inbox() {
           <div className="flex items-center shrink-0">
             <Button
               onClick={handleCreateNew}
-              className="h-9 w-10 p-0 flex items-center justify-center hover:scale-105 active:scale-95"
+              className="h-9 px-3 gap-2"
               variant="default"
             >
               <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">New Draft</span>
             </Button>
           </div>
         </div>
@@ -265,63 +312,87 @@ export default function Inbox() {
             
             {loading ? (
               <div className="flex items-center justify-center py-12 text-muted-foreground">
-                Loading...
+                <div className="text-sm">Loading...</div>
               </div>
             ) : filteredDrafts.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <FileText className="mb-4 h-12 w-12 text-muted-foreground opacity-50 mx-auto" />
-                <p className="text-sm text-muted-foreground">
+              <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+                <div className="mb-4 p-3 rounded-full bg-muted/50">
+                  <FileText className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-sm font-semibold mb-1">
                   {searchQuery ? 'No drafts found' : 'No drafts yet'}
-                </p>
+                </h3>
                 {!searchQuery && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-4"
-                    onClick={handleCreateNew}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create First Draft
-                  </Button>
+                  <>
+                    <p className="text-xs text-muted-foreground mb-4 max-w-xs">
+                      Get started by creating your first draft or use AI to generate content
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCreateNew}
+                        className="gap-2"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Create Draft
+                      </Button>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={handleCreateNew}
+                        className="gap-2"
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        Generate
+                      </Button>
+                    </div>
+                  </>
                 )}
               </div>
             ) : (
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 {filteredDrafts.map((draft) => {
                   const isActive = selectedDraft?.id === draft.id
                   const preview = getPreviewText(draft.content || '')
                   const timeAgo = formatDate(draft.created_at)
+                  const hasPrompt = draft.prompt && draft.prompt.trim().length > 0
                   
                   return (
-                    <div
+                    <Card
                       key={draft.id}
                       onClick={() => setSelectedDraft(draft)}
                       className={cn(
-                        "group rounded-lg border transition-all cursor-pointer",
-                        "hover:shadow-md hover:border-foreground/20",
-                        isActive
-                          ? "bg-accent border-accent-foreground/30 shadow-sm"
-                          : "bg-background border-border hover:bg-accent/30"
+                        "group cursor-pointer transition-all border-border/50 hover:border-border hover:shadow-sm",
+                        isActive && "border-primary/50 shadow-sm bg-accent/50"
                       )}
                     >
-                      {/* Header with timestamp */}
-                      <div className="flex items-center justify-end px-3 pt-2.5 pb-1.5">
-                        <span className="text-[10px] text-muted-foreground font-medium">
-                          {timeAgo}
-                        </span>
-                      </div>
-                      
-                      {/* Preview content */}
-                      <div className="px-3 pb-2.5">
+                      <CardContent className="p-4">
+                        {/* Header with timestamp and AI indicator */}
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            {hasPrompt && (
+                              <Badge variant="secondary" className="h-4 px-1.5 text-[9px] gap-0.5 opacity-60">
+                                <Sparkles className="h-2.5 w-2.5" />
+                                <span className="hidden sm:inline">AI</span>
+                              </Badge>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-muted-foreground font-medium">
+                            {timeAgo}
+                          </span>
+                        </div>
+                        
+                        {/* Preview content */}
                         <p className={cn(
-                          "text-xs leading-relaxed line-clamp-4",
+                          "text-sm leading-relaxed line-clamp-3",
                           isActive ? "text-foreground" : "text-muted-foreground",
                           "group-hover:text-foreground transition-colors"
                         )}>
                           {preview || <span className="italic opacity-50">No content</span>}
                         </p>
-                      </div>
-                    </div>
+                      </CardContent>
+                    </Card>
                   )
                 })}
               </div>
@@ -337,23 +408,32 @@ export default function Inbox() {
               onSave={handleSave}
               onDiscard={handleDiscard}
               onPostNow={() => setShowPostNowDialog(true)}
+              onConfirm={handleConfirm}
               autoSave={true}
               showActions={true}
             />
           ) : (
-            <div className="flex h-full items-center justify-center">
-              <div className="text-center max-w-md">
-                <FileText className="mx-auto mb-4 h-16 w-16 text-muted-foreground opacity-30" />
-                <p className="text-base font-semibold text-muted-foreground mb-2">
+            <div className="flex h-full items-center justify-center bg-muted/20">
+              <div className="text-center max-w-md px-6">
+                <div className="mb-6 p-4 rounded-full bg-muted/50 w-fit mx-auto">
+                  <FileText className="h-12 w-12 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">
                   No draft selected
-                </p>
-                <p className="text-sm text-muted-foreground mb-4">
+                </h3>
+                <p className="text-sm text-muted-foreground mb-6">
                   Select a draft from the sidebar or create a new one to get started.
                 </p>
-                <Button onClick={handleCreateNew}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create New Draft
-                </Button>
+                <div className="flex gap-3 justify-center">
+                  <Button onClick={handleCreateNew} variant="outline" className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Create Draft
+                  </Button>
+                  <Button onClick={handleCreateNew} className="gap-2">
+                    <Sparkles className="h-4 w-4" />
+                    Generate
+                  </Button>
+                </div>
               </div>
             </div>
           )}

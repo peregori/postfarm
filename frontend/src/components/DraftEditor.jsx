@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Sparkles, Eye, Save, X, Send, Loader2, Twitter, Linkedin, Check, XCircle, ArrowRight } from 'lucide-react'
+import { Sparkles, Eye, X, Send, Loader2, Twitter, Linkedin, Check, XCircle, ArrowRight, CheckCircle, Maximize2, Minimize2 } from 'lucide-react'
 import { llmApi } from '../api/client'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -11,24 +11,26 @@ import { cleanLLMArtifacts, checkPlatformLimits } from '@/lib/contentCleaner'
 import { Input } from '@/components/ui/input'
 import { Kbd } from '@/components/ui/kbd'
 import { calculateDiff, renderDiff } from '@/lib/diffHelper'
+import { cn } from '@/lib/utils'
 
 export default function DraftEditor({
   draft,
   onSave,
   onDiscard,
   onPostNow,
-  onAccept,
+  onConfirm,
   autoSave = true,
   showActions = true,
 }) {
   const [content, setContent] = useState(draft?.content || '')
   const [viewMode, setViewMode] = useState('split') // 'split', 'preview'
-  const [hasChanges, setHasChanges] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const textareaRef = useRef(null)
   const promptInputRef = useRef(null)
   const editInputRef = useRef(null)
   const promptTextareaRef = useRef(null)
   const editTextareaRef = useRef(null)
+  const autosaveTimeoutRef = useRef(null)
   
   // AI prompt states
   const [showGeneratePrompt, setShowGeneratePrompt] = useState(false)
@@ -52,28 +54,41 @@ export default function DraftEditor({
     if (draft) {
       const draftContent = draft.content || ''
       setContent(draftContent)
-      setHasChanges(false)
       setPendingAiChange(null)
       setAcceptedSegments(new Set())
     }
   }, [draft?.id])
 
-  // Auto-save every 30 seconds
+  // Auto-save on content change (debounced)
   useEffect(() => {
-    if (!autoSave || !hasChanges || !draft?.id) return
+    if (!autoSave || !draft || !onSave) return
+    
+    // Skip autosave for new empty drafts
+    if (!draft.id && !content.trim()) return
+    
+    // Clear existing timeout
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current)
+    }
 
-    const interval = setInterval(async () => {
+    // Set new timeout for autosave (200ms debounce)
+    autosaveTimeoutRef.current = setTimeout(async () => {
       try {
-        // Auto-save the current content (not pending changes - user must accept those manually)
-        await onSave({ content })
-        setHasChanges(false)
+        // Only save if there's no pending AI change (user must accept those manually)
+        if (!pendingAiChange) {
+          await onSave({ content })
+        }
       } catch (error) {
         console.error('Auto-save failed:', error)
       }
-    }, 30000)
+    }, 200)
 
-    return () => clearInterval(interval)
-  }, [content, hasChanges, autoSave, draft?.id, onSave])
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current)
+      }
+    }
+  }, [content, autoSave, draft, onSave, pendingAiChange])
 
   // Global selection listener for diff content and preview
   useEffect(() => {
@@ -316,7 +331,6 @@ export default function DraftEditor({
       })
     } else {
       setContent(newContent)
-      setHasChanges(true)
     }
     // Clear selection when content changes
     setSelectedText('')
@@ -541,7 +555,6 @@ export default function DraftEditor({
     }
     
     setContent(finalContent)
-    setHasChanges(true)
     setPendingAiChange(null)
     setAcceptedSegments(new Set())
     showToast.success('Changes Applied', 'AI changes have been applied to your draft.')
@@ -597,27 +610,10 @@ export default function DraftEditor({
     return cleaned
   })()
 
-  const handleSave = async () => {
-    try {
-      // If there's a pending AI change, accept it first before saving
-      let contentToSave = content
-      if (pendingAiChange) {
-        contentToSave = pendingAiChange.newContent
-        setContent(contentToSave)
-        setPendingAiChange(null)
-      }
-      
-      await onSave({ content: contentToSave })
-      setHasChanges(false)
-      showToast.success('Draft Saved', 'Changes saved successfully.')
-    } catch (error) {
-      showToast.error('Save Failed', 'Failed to save draft.')
-    }
-  }
 
-  const handleAccept = () => {
-    if (onAccept) {
-      onAccept({ content })
+  const handleConfirm = () => {
+    if (onConfirm) {
+      onConfirm({ content })
     }
   }
 
@@ -647,7 +643,10 @@ export default function DraftEditor({
     : []
 
   return (
-    <div className="flex flex-col h-full relative">
+    <div className={cn(
+      "flex flex-col h-full relative transition-all duration-300",
+      isFullscreen && "fixed inset-0 z-50 bg-background"
+    )}>
       {/* Header with View Toggle */}
       <div className="flex items-center justify-between px-4 py-2 border-b">
         <div className="flex items-center gap-4">
@@ -675,6 +674,21 @@ export default function DraftEditor({
               {linkedinLimits.count}/{linkedinLimits.limit}
             </Badge>
           </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="h-8 w-8 p-0"
+            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          >
+            {isFullscreen ? (
+              <Minimize2 className="h-4 w-4" />
+            ) : (
+              <Maximize2 className="h-4 w-4" />
+            )}
+          </Button>
         </div>
       </div>
 
@@ -710,8 +724,8 @@ export default function DraftEditor({
                   <div className="absolute top-2 right-2 z-20">
                     <Button
                       size="sm"
-                      variant="ghost"
-                      className="h-7 px-2 text-xs"
+                      variant="default"
+                      className="h-7 px-3 text-xs gap-1.5 bg-primary hover:bg-primary/90"
                       onClick={() => {
                         if (showGeneratePrompt) {
                           // Close if open
@@ -727,15 +741,15 @@ export default function DraftEditor({
                       }}
                       title="Generate with AI (⌘K)"
                     >
-                      <Sparkles className="h-3 w-3 mr-1" />
-                      AI
+                      <Sparkles className="h-3 w-3" />
+                      <span>Generate</span>
                     </Button>
                   </div>
                 )}
                 {showGeneratePrompt && (
-                  <div className="mb-4">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                      <Sparkles className="h-3 w-3" />
+                  <div className="mb-4 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                    <div className="flex items-center gap-2 text-xs font-medium mb-2 text-muted-foreground">
+                      <Sparkles className="h-3.5 w-3.5 text-primary" />
                       <span>Generate content</span>
                     </div>
                     <div className="relative">
@@ -778,9 +792,9 @@ export default function DraftEditor({
                 )}
 
                 {showEditPrompt && selectedText && selectedText.length > 0 && (
-                  <div className="mb-4">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                      <Sparkles className="h-3 w-3" />
+                  <div className="mb-4 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                    <div className="flex items-center gap-2 text-xs font-medium mb-2 text-muted-foreground">
+                      <Sparkles className="h-3.5 w-3.5 text-primary" />
                       <span>Edit selection</span>
                     </div>
                     <div className="relative">
@@ -947,7 +961,7 @@ export default function DraftEditor({
                         closeEditPrompt()
                       }
                     }}
-                    placeholder={showGeneratePrompt || showEditPrompt ? "" : "Start writing or press ⌘K to generate with AI"}
+                    placeholder={showGeneratePrompt || showEditPrompt ? "" : "Start writing or press ⌘K to generate"}
                     className="w-full resize-none text-sm font-normal border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none ring-0 ring-offset-0 rounded-none p-0 bg-transparent"
                     disabled={isGenerating}
                     style={{ 
@@ -979,9 +993,15 @@ export default function DraftEditor({
                 {isGenerating ? (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
-                      <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-primary" />
-                      <div className="text-sm text-muted-foreground">
-                        {pendingAiChange ? 'Processing...' : 'Generating content...'}
+                      <div className="mb-4 flex justify-center">
+                        <div className="relative">
+                          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                          <Sparkles className="h-4 w-4 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                        </div>
+                      </div>
+                      <div className="text-sm font-medium mb-1">Generating</div>
+                      <div className="text-xs text-muted-foreground">
+                        {pendingAiChange ? 'Processing...' : 'Creating content...'}
                       </div>
                     </div>
                   </div>
@@ -1052,24 +1072,33 @@ export default function DraftEditor({
       {showActions && (
         <div className="flex items-center justify-between p-4 border-t bg-muted/30">
           <div className="flex items-center gap-2">
-            {hasChanges && (
-              <Badge variant="outline" className="text-xs">
-                Unsaved changes
-              </Badge>
-            )}
           </div>
           <div className="flex items-center gap-1.5">
             {!pendingAiChange && (
               <>
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={!content.trim()}
-                >
-                  <Save className="mr-2 h-4 w-4 shrink-0" />
-                  Save
-                </Button>
+                {onDiscard && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={handleDiscard}
+                    className="bg-red-700 hover:bg-red-800 text-white"
+                  >
+                    <X className="mr-2 h-4 w-4 shrink-0" />
+                    Discard
+                  </Button>
+                )}
+                {onConfirm && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={handleConfirm}
+                    disabled={!content.trim()}
+                    className="bg-green-700 hover:bg-green-800 text-white"
+                  >
+                    <CheckCircle className="mr-2 h-4 w-4 shrink-0" />
+                    Confirm
+                  </Button>
+                )}
                 {onPostNow && (
                   <Button
                     variant="default"
@@ -1079,26 +1108,6 @@ export default function DraftEditor({
                   >
                     <Send className="mr-2 h-4 w-4 shrink-0" />
                     Post Now
-                  </Button>
-                )}
-                {onAccept && (
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={handleAccept}
-                    disabled={!content.trim()}
-                  >
-                    Accept
-                  </Button>
-                )}
-                {onDiscard && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDiscard}
-                  >
-                    <X className="mr-2 h-4 w-4 shrink-0" />
-                    Discard
                   </Button>
                 )}
               </>

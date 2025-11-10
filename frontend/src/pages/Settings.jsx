@@ -183,80 +183,90 @@ export default function Settings() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 p-6">
-      {/* Page Header */}
-      <div className="space-y-1">
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          Configure your AI model and connect social media platforms
-        </p>
-      </div>
-
-      {/* AI Model - Compact */}
-      <Card className="border-2">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Sparkles className="h-4 w-4 text-primary" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold">AI Model</div>
-                <div className="text-xs text-muted-foreground">For content generation</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              {models.length > 0 ? (
-                <>
-                  <select
-                    className="min-w-[280px] rounded-lg border-2 border-input bg-background px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                    value={selectedLlamaModel}
-                    onChange={(e) => setSelectedLlamaModel(e.target.value)}
-                  >
-                    <option value="">Select model...</option>
-                    {models.map((model) => (
-                      <option key={model.name} value={model.name}>
-                        {model.name} ({formatFileSize(model.size)})
-                      </option>
-                    ))}
-                  </select>
-                  {selectedLlamaModel && (
-                    <Badge variant="secondary" className="bg-green-500/20 text-green-700 dark:text-green-400">
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      Selected
-                    </Badge>
-                  )}
-                </>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">
-                    {!cacheDir?.exists ? 'No cache directory' : 'No models found'}
-                  </span>
-                  <Button variant="ghost" size="sm" onClick={loadModels}>
-                    Refresh
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Platform Connections - Main Focus */}
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-blue-500/10">
-            <SettingsIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight">Platform Connections</h2>
-            <p className="text-sm text-muted-foreground">
-              Connect your accounts to enable automated posting
-            </p>
-          </div>
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-4xl mx-auto space-y-8 p-6">
+        {/* Page Header */}
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+          <p className="text-sm text-muted-foreground">
+            Configure your local AI model and connect social media platforms
+          </p>
         </div>
 
-        {platforms.length === 0 ? (
+        {/* AI Model Section - Prominently Featured */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold">AI Model Configuration</h2>
+          </div>
+          <Card>
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Select AI Model
+                  </label>
+                  {models.length > 0 ? (
+                    <div className="space-y-3">
+                      <select
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                        value={selectedLlamaModel}
+                        onChange={(e) => setSelectedLlamaModel(e.target.value)}
+                      >
+                        <option value="">Select model...</option>
+                        {models.map((model) => (
+                          <option key={model.name} value={model.name}>
+                            {model.name} ({formatFileSize(model.size)})
+                          </option>
+                        ))}
+                      </select>
+                      {selectedLlamaModel && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Badge variant="secondary" className="bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/30">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            Model Selected
+                          </Badge>
+                          <span className="text-muted-foreground">
+                            Ready for content generation
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+                      <div>
+                        <p className="text-sm font-medium mb-1">
+                          {!cacheDir?.exists ? 'Cache directory not found' : 'No models found'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {cacheDir?.path || 'Place GGUF models in the cache directory'}
+                        </p>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={loadModels}>
+                        Refresh
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <div className="pt-4 border-t">
+                  <p className="text-xs text-muted-foreground">
+                    <strong className="text-foreground">Privacy:</strong> All content generation runs entirely on your machine. 
+                    No data is sent to external services.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Platform Connections */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <SettingsIcon className="h-5 w-5 text-muted-foreground" />
+            <h2 className="text-lg font-semibold">Platform Connections</h2>
+          </div>
+
+          {platforms.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
               <SettingsIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
@@ -544,7 +554,8 @@ export default function Settings() {
               )
             })}
           </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Calendar, Clock, Send, Twitter, Linkedin, CheckCircle, X, Trash2, Search, Plus } from 'lucide-react'
+import { Calendar, Clock, Send, Twitter, Linkedin, CheckCircle, X, Trash2, Search, Plus, Sparkles } from 'lucide-react'
 import { draftsApi, schedulerApi, platformsApi } from '../api/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { showToast } from '@/lib/toast'
 import CalendarView from '@/components/Calendar'
@@ -313,11 +314,21 @@ export default function Schedule() {
   const today = new Date().toISOString().split('T')[0]
   const preview = selectedDraft ? getPreviewText(selectedDraft.content || '') : ''
 
-  const filteredDrafts = drafts.filter((draft) => {
-    if (!searchQuery) return true
-    const query = searchQuery.toLowerCase()
-    return draft.content?.toLowerCase().includes(query)
-  }).sort((a, b) => {
+  const filteredDrafts = drafts
+    .filter((draft) => {
+      // Only show confirmed drafts (drafts with "confirmed" tag)
+      const tags = draft.tags || []
+      const isConfirmed = tags.includes('confirmed')
+      
+      // Filter by search query if provided
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase()
+        return isConfirmed && draft.content?.toLowerCase().includes(query)
+      }
+      
+      return isConfirmed
+    })
+    .sort((a, b) => {
     if (sortBy === 'oldest') {
       return new Date(a.created_at) - new Date(b.created_at)
     } else if (sortBy === 'alphabetical') {
@@ -330,35 +341,34 @@ export default function Schedule() {
 
   return (
     <DndContext onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
-      <div className="flex flex-col h-[calc(100vh-8rem)]">
+      <div className="flex flex-col h-full">
         {/* Header */}
-        <div className="border-b bg-background">
+        <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="flex h-16 items-center gap-4 px-6">
             {/* Left: Title and Scheduled Count */}
             <div className="flex items-center gap-3 shrink-0">
-              <h2 className="text-base font-semibold">Schedule</h2>
-              <Badge variant="secondary" className="h-7 px-2.5 text-xs font-medium">
+              <h2 className="text-lg font-semibold">Schedule</h2>
+              <Badge variant="secondary" className="h-6 px-2 text-xs font-medium">
                 {scheduled.length}
               </Badge>
             </div>
 
             {/* Center: Search Bar */}
-            <div className="flex-1 flex justify-center">
-              <div className="relative w-full max-w-2xl">
-                <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground shrink-0" />
+            <div className="flex-1 flex justify-center max-w-xl mx-auto">
+              <div className="relative w-full">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground shrink-0" />
                 <Input
                   type="text"
                   placeholder="Search drafts..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 h-9 text-base"
+                  className="pl-9 h-9 text-sm bg-muted/50 border-muted focus-visible:ring-1 focus-visible:ring-ring"
                 />
               </div>
             </div>
 
-            {/* Right: Spacer or Action Button */}
+            {/* Right: Spacer */}
             <div className="flex items-center shrink-0 w-10">
-              {/* Empty space for alignment */}
             </div>
           </div>
         </div>
@@ -370,17 +380,19 @@ export default function Schedule() {
             <div className="p-4">
           
           {filteredDrafts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Calendar className="mb-4 h-12 w-12 text-muted-foreground opacity-50 mx-auto" />
-              <p className="text-sm text-muted-foreground">
-                {searchQuery ? 'No drafts found' : 'No drafts available'}
-              </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                {searchQuery ? 'Try a different search' : 'Create drafts in Inbox first'}
+            <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+              <div className="mb-4 p-3 rounded-full bg-muted/50">
+                <Calendar className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-sm font-semibold mb-1">
+                {searchQuery ? 'No confirmed drafts found' : 'No confirmed drafts available'}
+              </h3>
+              <p className="text-xs text-muted-foreground mt-2 max-w-xs">
+                {searchQuery ? 'Try a different search' : 'Confirm drafts in Inbox to schedule them'}
               </p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {/* Sort Filter */}
               <div className="mb-2">
                 <Select value={sortBy} onValueChange={setSortBy}>
@@ -402,6 +414,7 @@ export default function Schedule() {
                     key={draft.id}
                     draft={draft}
                     onClick={() => handleSelectDraft(draft)}
+                    isSelected={isSelected}
                   />
                 )
               })}
@@ -605,7 +618,7 @@ export default function Schedule() {
 }
 
 // Draggable Draft Component
-function DraggableDraft({ draft, onClick }) {
+function DraggableDraft({ draft, onClick, isSelected }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `draft-${draft.id}`,
     data: draft,
@@ -615,21 +628,35 @@ function DraggableDraft({ draft, onClick }) {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
   } : undefined
 
+  const preview = getPreviewText(draft.content || '')
+  const hasPrompt = draft.prompt && draft.prompt.trim().length > 0
+
   return (
-    <div
+    <Card
       ref={setNodeRef}
       style={style}
       {...listeners}
       {...attributes}
       onClick={onClick}
       className={cn(
-        "rounded-lg border p-4 transition-colors cursor-grab active:cursor-grabbing",
-        isDragging ? "opacity-50" : "bg-background border-border hover:bg-accent/50"
+        "cursor-grab active:cursor-grabbing transition-all border-border/50 hover:border-border hover:shadow-sm",
+        isDragging && "opacity-50",
+        isSelected && "border-primary/50 shadow-sm bg-accent/50"
       )}
     >
-      <p className="text-xs text-muted-foreground line-clamp-4 leading-relaxed">
-        {getPreviewText(draft.content || '') || 'No content'}
-      </p>
-    </div>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-2">
+              {hasPrompt && (
+                <Badge variant="secondary" className="h-4 px-1.5 text-[9px] gap-0.5 opacity-60">
+                  <Sparkles className="h-2.5 w-2.5" />
+                  <span className="hidden sm:inline">AI</span>
+                </Badge>
+              )}
+        </div>
+        <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
+          {preview || <span className="italic opacity-50">No content</span>}
+        </p>
+      </CardContent>
+    </Card>
   )
 }

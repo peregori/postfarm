@@ -1,57 +1,44 @@
-import { Link, useLocation } from 'react-router-dom'
-import { 
-  Settings, 
-  Calendar,
-  Inbox as InboxIcon
-} from 'lucide-react'
+import { useState } from 'react'
+import Sidebar from './Sidebar'
+import { Menu, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import ServerStatus from './ServerStatus'
-
-const navigation = [
-  { name: 'Inbox', href: '/', icon: InboxIcon },
-  { name: 'Schedule', href: '/schedule', icon: Calendar },
-  { name: 'Settings', href: '/settings', icon: Settings },
-]
 
 export default function Layout({ children }) {
-  const location = useLocation()
-  const currentPath = location.pathname
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
-    <div className="h-screen overflow-hidden bg-background text-foreground flex flex-col">
-      {/* Top Navigation */}
-      <header className="flex-shrink-0 z-30 w-full border-b bg-background">
-        <div className="container mx-auto px-4">
-          <div className="flex h-16 items-center justify-between gap-4">
-            <h1 className="text-lg font-bold">PostFarm</h1>
-            <nav className="flex items-center gap-2">
-              {navigation.map((item) => {
-                const Icon = item.icon
-                const isActive = currentPath === item.href
-                return (
-                  <Link
-                    key={item.href}
-                    to={item.href}
-                    className={cn(
-                      "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors gap-2",
-                      isActive
-                        ? "bg-secondary text-secondary-foreground"
-                        : "text-foreground/80 hover:bg-accent hover:text-accent-foreground"
-                    )}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span className="hidden sm:inline">{item.name}</span>
-                  </Link>
-                )
-              })}
-              <ServerStatus />
-            </nav>
-          </div>
-        </div>
-      </header>
+    <div className="h-screen overflow-hidden bg-background text-foreground flex">
+      {/* Mobile Menu Button */}
+      <div className="md:hidden fixed top-4 left-4 z-50">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-9 w-9 p-0"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+        >
+          {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </Button>
+      </div>
 
-      {/* Page content */}
-      <main className="flex-1 overflow-hidden container mx-auto px-4">
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-background/80 backdrop-blur-sm z-40"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Navigation */}
+      <div className={cn(
+        "md:relative fixed inset-y-0 left-0 z-40 transition-transform duration-300",
+        mobileMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+      )}>
+        <Sidebar onNavigate={() => setMobileMenuOpen(false)} />
+      </div>
+
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-hidden flex flex-col md:ml-0">
         {children}
       </main>
     </div>

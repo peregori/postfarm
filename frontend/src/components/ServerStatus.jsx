@@ -88,25 +88,25 @@ export default function ServerStatus() {
 
   return (
     <Button
-      variant="outline"
+      variant={status.running ? "default" : "outline"}
       size="sm"
-      className="gap-2 border"
+      className="w-full gap-2 justify-start"
       onClick={handleToggle}
       disabled={actionLoading}
     >
       {status.running ? (
         <>
-          <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="hidden sm:inline">Stop Server</span>
+          <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse shrink-0" />
+          <span className="text-xs">AI Ready</span>
         </>
       ) : (
         <>
-          <div className="h-2 w-2 rounded-full bg-muted-foreground" />
-          <span className="hidden sm:inline">Connect Llama.cpp</span>
+          <div className="h-2 w-2 rounded-full bg-muted-foreground shrink-0" />
+          <span className="text-xs">Connect AI</span>
         </>
       )}
       {actionLoading && (
-        <Loader2 className="h-4 w-4 animate-spin ml-1 shrink-0" />
+        <Loader2 className="h-3 w-3 animate-spin ml-auto shrink-0" />
       )}
     </Button>
   )
