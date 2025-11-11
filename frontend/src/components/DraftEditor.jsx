@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { Sparkles, Eye, X, Send, Loader2, Twitter, Linkedin, Check, XCircle, ArrowRight, CheckCircle, Maximize2, Minimize2 } from 'lucide-react'
+import { Sparkles, Eye, X, Send, Loader2, Check, XCircle, ArrowRight, CheckCircle } from 'lucide-react'
+import * as simpleIcons from 'simple-icons'
 import { llmApi } from '../api/client'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { showToast } from '@/lib/toast'
@@ -24,7 +24,6 @@ export default function DraftEditor({
 }) {
   const [content, setContent] = useState(draft?.content || '')
   const [viewMode, setViewMode] = useState('split') // 'split', 'preview'
-  const [isFullscreen, setIsFullscreen] = useState(false)
   const textareaRef = useRef(null)
   const promptInputRef = useRef(null)
   const editInputRef = useRef(null)
@@ -637,6 +636,20 @@ export default function DraftEditor({
   const twitterLimits = checkPlatformLimits(content, 'twitter')
   const linkedinLimits = checkPlatformLimits(content, 'linkedin')
 
+  // Helper functions for writing stats
+  const getWordCount = (text) => {
+    if (!text || !text.trim()) return 0
+    return text.trim().split(/\s+/).filter(word => word.length > 0).length
+  }
+
+  const getReadingTime = (wordCount) => {
+    if (wordCount === 0) return 0
+    return Math.ceil(wordCount / 200) // 200 words per minute
+  }
+
+  const wordCount = getWordCount(content)
+  const readingTime = getReadingTime(wordCount)
+
   // Calculate diff for preview - recalculate when pendingAiChange changes
   const diffSegments = pendingAiChange 
     ? (() => {
@@ -648,10 +661,7 @@ export default function DraftEditor({
     : []
 
   return (
-    <div className={cn(
-      "flex flex-col h-full relative transition-all duration-300",
-      isFullscreen && "fixed inset-0 z-50 bg-background"
-    )}>
+    <div className="flex flex-col h-full relative transition-all duration-300">
       {/* Header with View Toggle */}
       <div className="flex items-center justify-between px-4 py-2 border-b">
         <div className="flex items-center gap-4">
@@ -668,33 +678,78 @@ export default function DraftEditor({
             </TabsList>
           </Tabs>
 
-          {/* Platform Indicators */}
-          <div className="flex items-center gap-2">
-            <Badge variant={twitterLimits.fits ? 'secondary' : 'destructive'} className="gap-1 text-xs">
-              <Twitter className="h-3 w-3 shrink-0" />
-              {twitterLimits.count}/{twitterLimits.limit}
-            </Badge>
-            <Badge variant={linkedinLimits.fits ? 'secondary' : 'destructive'} className="gap-1 text-xs">
-              <Linkedin className="h-3 w-3 shrink-0" />
-              {linkedinLimits.count}/{linkedinLimits.limit}
-            </Badge>
+          {/* Writing Stats */}
+          {content.trim() && (
+            <>
+              <Separator orientation="vertical" className="h-4" />
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span>{content.length} {content.length === 1 ? 'char' : 'chars'}</span>
+                {wordCount > 0 && (
+                  <span className="text-muted-foreground/70">·</span>
+                )}
+                {wordCount > 0 && (
+                  <span>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
+                )}
+                {readingTime > 0 && (
+                  <span className="text-muted-foreground/70">·</span>
+                )}
+                {readingTime > 0 && (
+                  <span>{readingTime} {readingTime === 1 ? 'min read' : 'min read'}</span>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Platform Counters */}
+        {content.trim() && (
+          <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-1.5">
+              <svg
+                role="img"
+                viewBox="0 0 24 24"
+                className="h-3 w-3 shrink-0"
+                fill="currentColor"
+                style={{ 
+                  color: !twitterLimits.fits 
+                    ? 'hsl(var(--destructive))' 
+                    : '#000000'
+                }}
+                preserveAspectRatio="xMidYMid meet"
+              >
+                <path d={simpleIcons.siX.path} />
+              </svg>
+              <span className={cn(
+                "text-muted-foreground leading-none",
+                !twitterLimits.fits && "text-destructive"
+              )}>
+                {twitterLimits.count}/{twitterLimits.limit}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <svg
+                role="img"
+                viewBox="0 0 24 24"
+                className="h-3.5 w-3.5 shrink-0"
+                fill="currentColor"
+                style={{ 
+                  color: !linkedinLimits.fits 
+                    ? 'hsl(var(--destructive))' 
+                    : '#0A66C2'
+                }}
+                preserveAspectRatio="xMidYMid meet"
+              >
+                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+              </svg>
+              <span className={cn(
+                "text-muted-foreground leading-none",
+                !linkedinLimits.fits && "text-destructive"
+              )}>
+                {linkedinLimits.count}/{linkedinLimits.limit}
+              </span>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            className="h-8 w-8 p-0"
-            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-          >
-            {isFullscreen ? (
-              <Minimize2 className="h-4 w-4" />
-            ) : (
-              <Maximize2 className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
+        )}
       </div>
 
 
