@@ -325,7 +325,7 @@ export default function Inbox() {
                 {!searchQuery && (
                   <>
                     <p className="text-xs text-muted-foreground mb-4 max-w-xs">
-                      Get started by creating your first draft or use AI to generate content
+                      Get started by creating your first draft
                     </p>
                     <div className="flex gap-2">
                       <Button
@@ -336,15 +336,6 @@ export default function Inbox() {
                       >
                         <Plus className="h-4 w-4" />
                         Create Draft
-                      </Button>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={handleCreateNew}
-                        className="gap-2"
-                      >
-                        <Sparkles className="h-4 w-4" />
-                        Generate
                       </Button>
                     </div>
                   </>
@@ -428,10 +419,6 @@ export default function Inbox() {
                   <Button onClick={handleCreateNew} variant="outline" className="gap-2">
                     <Plus className="h-4 w-4" />
                     Create Draft
-                  </Button>
-                  <Button onClick={handleCreateNew} className="gap-2">
-                    <Sparkles className="h-4 w-4" />
-                    Generate
                   </Button>
                 </div>
               </div>

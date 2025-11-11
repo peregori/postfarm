@@ -3,7 +3,6 @@ import {
   Settings, 
   Calendar,
   Inbox as InboxIcon,
-  Sparkles,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react'
@@ -12,6 +11,7 @@ import ServerStatus from './ServerStatus'
 import { Separator } from '@/components/ui/separator'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import Logo from './Logo'
 
 const navigation = [
   { name: 'Inbox', href: '/', icon: InboxIcon },
@@ -35,12 +35,12 @@ export default function Sidebar({ onNavigate }) {
       <div className="flex items-center justify-between p-4 border-b">
         {!collapsed && (
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <Sparkles className="h-5 w-5 text-primary shrink-0" />
+            <Logo className="h-5 w-5 text-primary shrink-0" size={20} />
             <h1 className="text-lg font-semibold truncate">PostFarm</h1>
           </div>
         )}
         {collapsed && (
-          <Sparkles className="h-5 w-5 text-primary mx-auto" />
+          <Logo className="h-5 w-5 text-primary mx-auto" size={20} />
         )}
         <Button
           variant="ghost"

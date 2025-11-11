@@ -206,26 +206,31 @@ export default function DraftEditor({
   const handlePromptResize = (e) => {
     const textarea = e.target
     // Reset height to measure scrollHeight
-    textarea.style.height = '40px'
+    textarea.style.height = '36px'
     const scrollHeight = textarea.scrollHeight
-    const hasMultipleLines = scrollHeight > 40
+    const hasMultipleLines = scrollHeight > 36
+
     setPromptHasMultipleLines(hasMultipleLines)
-    // Only grow if content exceeds single line
+    // Only grow if content exceeds single line, with max height
     if (hasMultipleLines) {
-      textarea.style.height = `${scrollHeight}px`
+      textarea.style.height = `${Math.min(scrollHeight, 200)}px`
+    } else {
+      textarea.style.height = '36px'
     }
   }
 
   const handleEditResize = (e) => {
     const textarea = e.target
     // Reset height to measure scrollHeight
-    textarea.style.height = '40px'
+    textarea.style.height = '36px'
     const scrollHeight = textarea.scrollHeight
-    const hasMultipleLines = scrollHeight > 40
+    const hasMultipleLines = scrollHeight > 36
     setEditHasMultipleLines(hasMultipleLines)
-    // Only grow if content exceeds single line
+    // Only grow if content exceeds single line, with max height
     if (hasMultipleLines) {
-      textarea.style.height = `${scrollHeight}px`
+      textarea.style.height = `${Math.min(scrollHeight, 200)}px`
+    } else {
+      textarea.style.height = '36px'
     }
   }
 
@@ -719,18 +724,15 @@ export default function DraftEditor({
                     </div>
                   </div>
                 )}
-                {/* AI Generate Button - Hide when showing diff content to avoid overlap */}
-                {!pendingAiChange && (
-                  <div className="absolute top-2 right-2 z-20">
+                {/* AI Generate Button - Hide when showing diff content or when prompt is open */}
+                {!pendingAiChange && !showGeneratePrompt && !showEditPrompt && (
+                  <div className="absolute top-4 right-4 z-20">
                     <Button
                       size="sm"
-                      variant="default"
-                      className="h-7 px-3 text-xs gap-1.5 bg-primary hover:bg-primary/90"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 rounded-md hover:bg-accent/50 border border-border/50 bg-background/80 backdrop-blur-sm"
                       onClick={() => {
-                        if (showGeneratePrompt) {
-                          // Close if open
-                          closeGeneratePrompt()
-                        } else if (showEditPrompt) {
+                        if (showEditPrompt) {
                           // Switch from edit to generate
                           closeEditPrompt()
                           setShowGeneratePrompt(true)
@@ -741,17 +743,12 @@ export default function DraftEditor({
                       }}
                       title="Generate with AI (⌘K)"
                     >
-                      <Sparkles className="h-3 w-3" />
-                      <span>Generate</span>
+                      <Sparkles className="h-3.5 w-3.5 text-primary" />
                     </Button>
                   </div>
                 )}
                 {showGeneratePrompt && (
-                  <div className="mb-4 p-3 rounded-lg bg-primary/5 border border-primary/20">
-                    <div className="flex items-center gap-2 text-xs font-medium mb-2 text-muted-foreground">
-                      <Sparkles className="h-3.5 w-3.5 text-primary" />
-                      <span>Generate content</span>
-                    </div>
+                  <div className="mb-3 relative">
                     <div className="relative">
                       <Textarea
                         ref={promptTextareaRef}
@@ -770,8 +767,8 @@ export default function DraftEditor({
                             handleGenerate()
                           }
                         }}
-                        className="text-sm focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none resize-none pr-10 min-h-[40px] max-h-[200px] overflow-y-auto scrollbar-thin"
-                        style={{ height: '40px' }}
+                        className="text-sm focus-visible:ring-1 focus-visible:ring-primary/20 focus-visible:ring-offset-0 resize-none pr-10 min-h-[36px] max-h-[200px] overflow-y-auto scrollbar-thin border-border/50 bg-muted/30"
+                        style={{ height: '36px', transition: 'height 0.15s ease-out' }}
                         autoFocus
                       />
                       <Button
@@ -779,12 +776,12 @@ export default function DraftEditor({
                         variant="ghost"
                         onClick={handleGenerate}
                         disabled={!generatePrompt.trim() || isGenerating}
-                        className={`absolute right-1 h-8 w-8 p-0 hover:bg-transparent ${promptHasMultipleLines ? 'bottom-1' : 'top-1'}`}
+                        className={`absolute right-1 h-7 w-7 p-0 hover:bg-primary/10 ${promptHasMultipleLines ? 'bottom-1' : 'top-1'}`}
                       >
                         {isGenerating ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
                         ) : (
-                          <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                          <ArrowRight className="h-3.5 w-3.5 text-primary" />
                         )}
                       </Button>
                     </div>
@@ -792,11 +789,7 @@ export default function DraftEditor({
                 )}
 
                 {showEditPrompt && selectedText && selectedText.length > 0 && (
-                  <div className="mb-4 p-3 rounded-lg bg-primary/5 border border-primary/20">
-                    <div className="flex items-center gap-2 text-xs font-medium mb-2 text-muted-foreground">
-                      <Sparkles className="h-3.5 w-3.5 text-primary" />
-                      <span>Edit selection</span>
-                    </div>
+                  <div className="mb-3 relative">
                     <div className="relative">
                       <Textarea
                         ref={editTextareaRef}
@@ -815,8 +808,8 @@ export default function DraftEditor({
                             handleEditSelection()
                           }
                         }}
-                        className="text-sm focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none resize-none pr-10 min-h-[40px] max-h-[200px] overflow-y-auto scrollbar-thin"
-                        style={{ height: '40px' }}
+                        className="text-sm focus-visible:ring-1 focus-visible:ring-primary/20 focus-visible:ring-offset-0 resize-none pr-10 min-h-[36px] max-h-[200px] overflow-y-auto scrollbar-thin border-border/50 bg-muted/30"
+                        style={{ height: '36px', transition: 'height 0.15s ease-out' }}
                         autoFocus
                       />
                       <Button
@@ -824,12 +817,12 @@ export default function DraftEditor({
                         variant="ghost"
                         onClick={handleEditSelection}
                         disabled={!editInstruction.trim() || isGenerating}
-                        className={`absolute right-1 h-8 w-8 p-0 hover:bg-transparent ${editHasMultipleLines ? 'bottom-1' : 'top-1'}`}
+                        className={`absolute right-1 h-7 w-7 p-0 hover:bg-primary/10 ${editHasMultipleLines ? 'bottom-1' : 'top-1'}`}
                       >
                         {isGenerating ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
                         ) : (
-                          <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                          <ArrowRight className="h-3.5 w-3.5 text-primary" />
                         )}
                       </Button>
                     </div>
@@ -962,7 +955,7 @@ export default function DraftEditor({
                       }
                     }}
                     placeholder={showGeneratePrompt || showEditPrompt ? "" : "Start writing or press ⌘K to generate"}
-                    className="w-full resize-none text-sm font-normal border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none ring-0 ring-offset-0 rounded-none p-0 bg-transparent"
+                    className="w-full resize-none text-sm font-normal border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none ring-0 ring-offset-0 rounded-none p-0 bg-transparent pr-12"
                     disabled={isGenerating}
                     style={{ 
                       fontFamily: 'inherit',
