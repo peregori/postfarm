@@ -8,7 +8,8 @@ import {
   X,
   Twitter,
   Linkedin,
-  Sparkles
+  Sparkles,
+  Edit
 } from 'lucide-react'
 import { draftsApi, platformsApi } from '../api/client'
 import { Button } from '@/components/ui/button'
@@ -406,21 +407,15 @@ export default function Inbox() {
           ) : (
             <div className="flex h-full items-center justify-center bg-muted/20">
               <div className="text-center max-w-md px-6">
-                <div className="mb-6 p-4 rounded-full bg-muted/50 w-fit mx-auto">
-                  <FileText className="h-12 w-12 text-muted-foreground" />
+                <div className="mb-6 p-3 rounded-full bg-muted/50 border border-border/50 w-fit mx-auto">
+                  <Edit className="h-8 w-8 text-muted-foreground" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">
-                  No draft selected
+                <h3 className="text-xl font-semibold mb-3 text-foreground">
+                  Your Editing Workspace
                 </h3>
-                <p className="text-sm text-muted-foreground mb-6">
-                  Select a draft from the sidebar or create a new one to get started.
+                <p className="text-sm text-muted-foreground">
+                  Select a draft from the sidebar to start editing.
                 </p>
-                <div className="flex gap-3 justify-center">
-                  <Button onClick={handleCreateNew} variant="outline" className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    Create Draft
-                  </Button>
-                </div>
               </div>
             </div>
           )}
@@ -445,9 +440,10 @@ export default function Inbox() {
               Cancel
             </Button>
             <Button 
-              variant="destructive" 
+              variant="default" 
               onClick={handleDelete}
               disabled={deleting}
+              className="bg-red-700 hover:bg-red-800 text-white"
             >
               {deleting ? 'Discarding...' : 'Discard'}
             </Button>
