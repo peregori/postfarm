@@ -756,8 +756,8 @@ export default function DraftEditor({
       {/* Editor/Preview Content */}
       <div className="flex-1 overflow-hidden flex flex-col min-h-0 editor-container">
         {viewMode === 'split' && (
-          <div className="flex flex-1 overflow-hidden min-h-0 relative">
-            <div className="flex flex-col w-1/2 border-r overflow-hidden min-w-0 relative">
+          <div className="flex flex-1 overflow-hidden min-h-0 relative gap-4 p-2 bg-muted/30">
+            <div className="flex flex-col w-1/2 overflow-hidden min-w-0 relative rounded-lg border bg-background shadow-sm">
               <div className="flex-1 p-4 overflow-y-auto min-h-0 relative scrollbar-thin">
                 {/* Global Discard/Accept buttons - placed at top of diff content */}
                 {pendingAiChange && diffSegments.length > 0 && (
@@ -1025,8 +1025,8 @@ export default function DraftEditor({
               </div>
             </div>
 
-            <Separator orientation="vertical" />
-            <div className="w-1/2 border-l flex flex-col" style={{ height: '100%', minHeight: 0 }}>
+            <div className="w-[2px] bg-border shrink-0 absolute left-1/2 inset-y-0 -translate-x-1/2" />
+            <div className="w-1/2 flex flex-col rounded-lg border bg-background shadow-sm" style={{ height: '100%', minHeight: 0 }}>
               <div 
                 className="p-4 overflow-y-auto flex-1 scrollbar-thin select-text" 
                 style={{ height: '100%', maxHeight: '100%' }}
