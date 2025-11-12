@@ -298,7 +298,7 @@ export default function Settings() {
                 {/* Provider-specific configuration */}
                 {currentProvider && (
                   <div className="pt-4 border-t space-y-4">
-                    {currentProvider.provider_name === 'openai' && (
+                    {currentProvider.provider_name === 'google' && (
                       <div className="space-y-3">
                         <div>
                           <label className="text-sm font-medium mb-1 block">
@@ -306,23 +306,34 @@ export default function Settings() {
                           </label>
                           <div className="flex gap-2">
                             <Input
-                              type={showPasswords.openai ? "text" : "password"}
-                              value={providerConfigs.openai?.api_key || ''}
-                              onChange={(e) => handleUpdateProviderConfig('openai', {
-                                ...providerConfigs.openai,
+                              type={showPasswords.google ? "text" : "password"}
+                              value={providerConfigs.google?.api_key || ''}
+                              onChange={(e) => handleUpdateProviderConfig('google', {
+                                ...providerConfigs.google,
                                 api_key: e.target.value
                               })}
-                              placeholder="sk-..."
+                              placeholder="AIza..."
                               className="flex-1"
                             />
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => setShowPasswords(prev => ({ ...prev, openai: !prev.openai }))}
+                              onClick={() => setShowPasswords(prev => ({ ...prev, google: !prev.google }))}
                             >
-                              {showPasswords.openai ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              {showPasswords.google ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                             </Button>
                           </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Get your API key from{' '}
+                            <a 
+                              href="https://aistudio.google.com/apikey" 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              Google AI Studio
+                            </a>
+                          </p>
                         </div>
                         <div>
                           <label className="text-sm font-medium mb-1 block">
@@ -330,81 +341,28 @@ export default function Settings() {
                           </label>
                           <select
                             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            value={providerConfigs.openai?.model || 'gpt-4o-mini'}
-                            onChange={(e) => handleUpdateProviderConfig('openai', {
-                              ...providerConfigs.openai,
+                            value={providerConfigs.google?.model || 'gemini-2.0-flash'}
+                            onChange={(e) => handleUpdateProviderConfig('google', {
+                              ...providerConfigs.google,
                               model: e.target.value
                             })}
                           >
-                            <option value="gpt-4o-mini">GPT-4o Mini</option>
-                            <option value="gpt-4o">GPT-4o</option>
-                            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                            <option value="gemini-2.0-flash">Gemini 2.0 Flash (Fast, Recommended)</option>
+                            <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite (Fastest)</option>
+                            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Latest)</option>
+                            <option value="gemini-2.5-pro">Gemini 2.5 Pro (Most Capable)</option>
                           </select>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            2.0 Flash is recommended for social media content
+                          </p>
                         </div>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleTestProvider('openai')}
-                          disabled={testingProvider === 'openai'}
+                          onClick={() => handleTestProvider('google')}
+                          disabled={testingProvider === 'google'}
                         >
-                          {testingProvider === 'openai' ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          ) : null}
-                          Test Connection
-                        </Button>
-                      </div>
-                    )}
-
-                    {currentProvider.provider_name === 'anthropic' && (
-                      <div className="space-y-3">
-                        <div>
-                          <label className="text-sm font-medium mb-1 block">
-                            API Key
-                          </label>
-                          <div className="flex gap-2">
-                            <Input
-                              type={showPasswords.anthropic ? "text" : "password"}
-                              value={providerConfigs.anthropic?.api_key || ''}
-                              onChange={(e) => handleUpdateProviderConfig('anthropic', {
-                                ...providerConfigs.anthropic,
-                                api_key: e.target.value
-                              })}
-                              placeholder="sk-ant-..."
-                              className="flex-1"
-                            />
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setShowPasswords(prev => ({ ...prev, anthropic: !prev.anthropic }))}
-                            >
-                              {showPasswords.anthropic ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                            </Button>
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium mb-1 block">
-                            Model
-                          </label>
-                          <select
-                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            value={providerConfigs.anthropic?.model || 'claude-3-5-sonnet-20241022'}
-                            onChange={(e) => handleUpdateProviderConfig('anthropic', {
-                              ...providerConfigs.anthropic,
-                              model: e.target.value
-                            })}
-                          >
-                            <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
-                            <option value="claude-3-opus-20240229">Claude 3 Opus</option>
-                            <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
-                          </select>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleTestProvider('anthropic')}
-                          disabled={testingProvider === 'anthropic'}
-                        >
-                          {testingProvider === 'anthropic' ? (
+                          {testingProvider === 'google' ? (
                             <Loader2 className="h-4 w-4 animate-spin mr-2" />
                           ) : null}
                           Test Connection

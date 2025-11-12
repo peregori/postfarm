@@ -2,25 +2,26 @@ from typing import Optional
 from app.providers.base import BaseAIProvider
 
 try:
-    from openai import AsyncOpenAI
-    OPENAI_AVAILABLE = True
+    from google import genai
+    from google.genai.types import GenerateContentConfig
+    GOOGLE_AVAILABLE = True
 except ImportError:
-    OPENAI_AVAILABLE = False
+    GOOGLE_AVAILABLE = False
 
-class OpenAIProvider(BaseAIProvider):
-    """Provider for OpenAI API"""
+class GoogleProvider(BaseAIProvider):
+    """Provider for Google Gemini API"""
     
     def __init__(self, config: Optional[dict] = None):
-        if not OPENAI_AVAILABLE:
-            raise ImportError("OpenAI package not installed. Install it with: pip install openai")
+        if not GOOGLE_AVAILABLE:
+            raise ImportError("Google GenAI package not installed. Install it with: pip install google-genai")
         
         self.config = config or {}
         api_key = self.config.get('api_key')
         if not api_key:
-            raise ValueError("OpenAI API key is required")
+            raise ValueError("Google Gemini API key is required")
         
-        self.client = AsyncOpenAI(api_key=api_key)
-        self.model = self.config.get('model', 'gpt-4o-mini')
+        self.client = genai.Client(api_key=api_key)
+        self.model = self.config.get('model', 'gemini-2.0-flash')
         self.timeout = self.config.get('timeout', 60.0)
     
     async def generate_content(
@@ -30,33 +31,40 @@ class OpenAIProvider(BaseAIProvider):
         temperature: float = 0.7,
         system_prompt: Optional[str] = None
     ) -> str:
-        """Generate content using OpenAI API"""
+        """Generate content using Google Gemini API"""
         if system_prompt is None:
             system_prompt = """You are a social media content creator. 
 Create engaging, authentic content for professional platforms like Twitter and LinkedIn.
 Keep responses concise and platform-appropriate."""
         
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt}
-        ]
-        
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
+            # Build contents list with system prompt and user prompt
+            contents = []
+            if system_prompt:
+                contents.append(system_prompt)
+            contents.append(prompt)
+            
+            # Configure generation parameters
+            config = GenerateContentConfig(
                 temperature=temperature,
-                max_tokens=max_tokens,
-                timeout=self.timeout
+                max_output_tokens=max_tokens
             )
             
-            content = response.choices[0].message.content
+            # Generate content using async client
+            response = await self.client.aio.models.generate_content(
+                model=self.model,
+                contents=contents,
+                config=config
+            )
+            
+            # Extract text from response
+            content = response.text
             if not content:
-                raise ValueError("OpenAI returned empty content")
+                raise ValueError("Google Gemini returned empty content")
             
             return content.strip()
         except Exception as e:
-            raise ConnectionError(f"OpenAI API error: {str(e)}")
+            raise ConnectionError(f"Google Gemini API error: {str(e)}")
     
     async def edit_content(
         self,
@@ -85,17 +93,24 @@ Provide the edited version:"""
         )
     
     async def check_health(self) -> bool:
-        """Check if OpenAI API is accessible"""
+        """Check if Google Gemini API is accessible"""
         try:
-            # Simple health check - try to list models
-            await self.client.models.list(timeout=5.0)
+            # Simple health check - try a minimal request
+            config = GenerateContentConfig(
+                max_output_tokens=10
+            )
+            await self.client.aio.models.generate_content(
+                model=self.model,
+                contents=["test"],
+                config=config
+            )
             return True
         except Exception:
             return False
     
     def get_provider_name(self) -> str:
-        return "openai"
+        return "google"
     
     def get_display_name(self) -> str:
-        return "OpenAI"
+        return "Google Gemini"
 

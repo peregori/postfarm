@@ -30,6 +30,12 @@ class EditResponse(BaseModel):
     edited_content: str
     original_content: str
 
+class GenerateTitleRequest(BaseModel):
+    content: str
+
+class GenerateTitleResponse(BaseModel):
+    title: str
+
 @router.post("/generate", response_model=GenerateResponse)
 async def generate_content(request: GenerateRequest, llm_service: LLMService = Depends(get_llm_service)):
     """Generate content from a prompt using configured AI provider"""
@@ -75,6 +81,39 @@ async def edit_content(request: EditRequest, llm_service: LLMService = Depends(g
             status_code=500,
             detail=f"Error editing content: {str(e)}"
         )
+
+@router.post("/generate-title", response_model=GenerateTitleResponse)
+async def generate_title(request: GenerateTitleRequest, llm_service: LLMService = Depends(get_llm_service)):
+    """Generate a short title for draft content"""
+    try:
+        # Truncate content if too long
+        content_preview = request.content[:500] if len(request.content) > 500 else request.content
+        
+        title = await llm_service.generate_content(
+            prompt=f"Generate a concise 3-5 word title for this social media draft:\n\n{content_preview}",
+            max_tokens=20,
+            temperature=0.3,
+            system_prompt="You are a helpful assistant that creates short, descriptive titles. Return ONLY the title, nothing else. No quotes, no punctuation at the end."
+        )
+        
+        # Clean up the title
+        title = title.strip().strip('"').strip("'")
+        if len(title) > 60:
+            title = title[:60].rsplit(' ', 1)[0] + '...'
+        
+        return GenerateTitleResponse(title=title)
+    except ConnectionError as e:
+        # Return a fallback title if AI is not available
+        fallback = request.content[:50].strip()
+        if len(request.content) > 50:
+            fallback += '...'
+        return GenerateTitleResponse(title=fallback)
+    except Exception as e:
+        # Return a fallback title on error
+        fallback = request.content[:50].strip()
+        if len(request.content) > 50:
+            fallback += '...'
+        return GenerateTitleResponse(title=fallback)
 
 @router.get("/health")
 async def llm_health(llm_service: LLMService = Depends(get_llm_service)):

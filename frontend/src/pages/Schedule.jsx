@@ -376,7 +376,7 @@ export default function Schedule() {
         {/* Main Content */}
         <div className="flex flex-1 overflow-hidden h-full">
           {/* Drafts Sidebar */}
-          <div className="w-64 md:w-80 border-r bg-muted/30 overflow-y-auto scrollbar-thin transition-all duration-200">
+          <div className="w-64 border-r bg-muted/30 overflow-y-auto scrollbar-thin transition-all duration-200">
             <div className="p-4">
           
           {filteredDrafts.length === 0 ? (
@@ -392,9 +392,9 @@ export default function Schedule() {
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {/* Sort Filter */}
-              <div className="mb-2">
+              <div className="mb-3">
                 <Select value={sortBy} onValueChange={setSortBy}>
                   <SelectTrigger className="w-full h-8 text-xs border-muted/50 bg-muted/20 hover:bg-muted/40 focus:bg-background transition-all duration-200">
                     <SelectValue />
@@ -630,6 +630,30 @@ function DraggableDraft({ draft, onClick, isSelected }) {
 
   const preview = getPreviewText(draft.content || '')
   const hasPrompt = draft.prompt && draft.prompt.trim().length > 0
+  const draftTitle = draft.title || preview
+  
+  // Format timestamp
+  const formatDate = (dateString) => {
+    if (!dateString) return ''
+    try {
+      const date = new Date(dateString)
+      const now = new Date()
+      const diffMs = now - date
+      const diffMins = Math.floor(diffMs / 60000)
+      const diffHours = Math.floor(diffMs / 3600000)
+      const diffDays = Math.floor(diffMs / 86400000)
+
+      if (diffMins < 1) return 'Just now'
+      if (diffMins < 60) return `${diffMins}m ago`
+      if (diffHours < 24) return `${diffHours}h ago`
+      if (diffDays < 7) return `${diffDays}d ago`
+      return date.toLocaleDateString()
+    } catch {
+      return ''
+    }
+  }
+  
+  const timeAgo = formatDate(draft.created_at)
 
   return (
     <Card
@@ -644,17 +668,21 @@ function DraggableDraft({ draft, onClick, isSelected }) {
         isSelected && "border-primary/50 shadow-sm bg-accent/50"
       )}
     >
-      <CardContent className="p-4">
-        <div className="flex items-center gap-2 mb-2">
-              {hasPrompt && (
-                <Badge variant="secondary" className="h-4 px-1.5 text-[9px] gap-0.5 opacity-60">
-                  <Sparkles className="h-2.5 w-2.5" />
-                  <span className="hidden sm:inline">AI</span>
-                </Badge>
-              )}
+      <CardContent className="p-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-1.5">
+            {hasPrompt && (
+              <Badge variant="secondary" className="h-3.5 px-1 text-[8px] gap-0.5 opacity-60">
+                <Sparkles className="h-2 w-2" />
+              </Badge>
+            )}
+          </div>
+          <span className="text-[9px] text-muted-foreground font-medium">
+            {timeAgo}
+          </span>
         </div>
-        <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
-          {preview || <span className="italic opacity-50">No content</span>}
+        <p className="text-xs text-muted-foreground line-clamp-1 leading-snug font-medium">
+          {draftTitle || <span className="italic opacity-50">No content</span>}
         </p>
       </CardContent>
     </Card>

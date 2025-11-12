@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Power, Play, Square, RefreshCw, AlertCircle, CheckCircle, Terminal } from 'lucide-react'
 import { serverApi } from '../api/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,22 +25,79 @@ export default function ServerControl() {
   const [loading, setLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
   const [showStopDialog, setShowStopDialog] = useState(false)
+  const pollIntervalRef = useRef(10000) // Start with 10 seconds, longer than health checks
+  const intervalIdRef = useRef(null)
+  const isVisibleRef = useRef(true)
 
   useEffect(() => {
     loadStatus()
     loadModels()
-    // Poll status every 5 seconds
-    const interval = setInterval(loadStatus, 5000)
-    return () => clearInterval(interval)
+    
+    const startPolling = () => {
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current)
+      }
+      
+      intervalIdRef.current = setInterval(async () => {
+        if (isVisibleRef.current) {
+          const currentStatus = await loadStatus()
+          // Adjust interval based on status after load
+          if (currentStatus && !currentStatus.running && pollIntervalRef.current < 30000) {
+            pollIntervalRef.current = Math.min(pollIntervalRef.current * 1.5, 30000) // Max 30s
+            // Restart with new interval
+            if (intervalIdRef.current) {
+              clearInterval(intervalIdRef.current)
+              startPolling()
+            }
+          } else if (currentStatus && currentStatus.running && pollIntervalRef.current > 10000) {
+            pollIntervalRef.current = 10000 // Reset to 10s when running
+            // Restart with new interval
+            if (intervalIdRef.current) {
+              clearInterval(intervalIdRef.current)
+              startPolling()
+            }
+          }
+        }
+      }, pollIntervalRef.current)
+    }
+    
+    startPolling()
+    
+    // Handle page visibility
+    const handleVisibilityChange = () => {
+      isVisibleRef.current = !document.hidden
+      if (document.hidden) {
+        if (intervalIdRef.current) {
+          clearInterval(intervalIdRef.current)
+          intervalIdRef.current = null
+        }
+      } else {
+        if (!intervalIdRef.current) {
+          loadStatus()
+          startPolling()
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current)
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [])
 
   const loadStatus = async () => {
     try {
       const data = await serverApi.getStatus()
       setStatus(data)
+      return data
     } catch (error) {
       console.error('Failed to load server status:', error)
-      setStatus({ running: false, url: 'http://localhost:8080', port: 8080 })
+      const errorStatus = { running: false, url: 'http://localhost:8080', port: 8080 }
+      setStatus(errorStatus)
+      return errorStatus
     }
   }
 

@@ -13,14 +13,8 @@ _PROVIDER_REGISTRY = {
 
 # Try to register optional providers
 try:
-    from app.providers.openai import OpenAIProvider
-    _PROVIDER_REGISTRY['openai'] = OpenAIProvider
-except ImportError:
-    pass
-
-try:
-    from app.providers.anthropic import AnthropicProvider
-    _PROVIDER_REGISTRY['anthropic'] = AnthropicProvider
+    from app.providers.google import GoogleProvider
+    _PROVIDER_REGISTRY['google'] = GoogleProvider
 except ImportError:
     pass
 
@@ -34,18 +28,11 @@ def list_providers() -> List[Dict[str, str]]:
         },
     ]
     
-    if 'openai' in _PROVIDER_REGISTRY:
+    if 'google' in _PROVIDER_REGISTRY:
         providers.append({
-            'name': 'openai',
-            'display_name': 'OpenAI',
-            'description': 'OpenAI API (GPT-4, GPT-3.5, etc.)'
-        })
-    
-    if 'anthropic' in _PROVIDER_REGISTRY:
-        providers.append({
-            'name': 'anthropic',
-            'display_name': 'Anthropic',
-            'description': 'Anthropic Claude API'
+            'name': 'google',
+            'display_name': 'Google Gemini',
+            'description': 'Google Gemini API (2.0 Flash, 2.5 Flash, 2.5 Pro)'
         })
     
     return providers

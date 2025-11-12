@@ -38,33 +38,34 @@ export default function Drafts() {
     }
   }, [selectedDraft?.id]) // Only when draft ID changes
 
-  // Auto-save drafts every 30 seconds when editing
+  // Auto-save drafts after user stops typing (debounced)
   useEffect(() => {
     if (!selectedDraft || !originalDraft) return
 
-    const autoSave = async () => {
-      // Only save if content has changed
-      if (
-        selectedDraft.content !== originalDraft.content ||
-        selectedDraft.title !== originalDraft.title
-      ) {
-        try {
-          await draftsApi.update(selectedDraft.id, {
-            content: selectedDraft.content,
-            title: selectedDraft.title,
-          })
-          // Update original to reflect saved state
-          setOriginalDraft({ ...selectedDraft })
-        } catch (error) {
-          console.error('Auto-save failed:', error)
-          // Don't show toast for auto-save failures to avoid spam
-        }
-      }
-    }
+    // Only save if content has changed
+    const hasChanges = 
+      selectedDraft.content !== originalDraft.content ||
+      selectedDraft.title !== originalDraft.title
 
-    const interval = setInterval(autoSave, 30000) // 30 seconds
-    return () => clearInterval(interval)
-  }, [selectedDraft, originalDraft])
+    if (!hasChanges) return
+
+    // Debounce: save 2 seconds after user stops typing
+    const timeoutId = setTimeout(async () => {
+      try {
+        await draftsApi.update(selectedDraft.id, {
+          content: selectedDraft.content,
+          title: selectedDraft.title,
+        })
+        // Update original to reflect saved state
+        setOriginalDraft({ ...selectedDraft })
+      } catch (error) {
+        console.error('Auto-save failed:', error)
+        // Don't show toast for auto-save failures to avoid spam
+      }
+    }, 2000) // 2 seconds debounce
+
+    return () => clearTimeout(timeoutId)
+  }, [selectedDraft?.content, selectedDraft?.title, originalDraft])
 
   const loadDrafts = async () => {
     try {

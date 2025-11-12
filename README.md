@@ -4,18 +4,20 @@ A full-stack local application for generating, editing, and scheduling social me
 
 ## Features
 
-- 🤖 **Local LLM Integration**: Generate content using local GGUF models via llama.cpp
+- 🤖 **Flexible AI Integration**: Generate content using local GGUF models via llama.cpp or Google Gemini API
 - ✍️ **Draft Management**: Create, edit, and manage content drafts
 - 📅 **Scheduling**: Schedule posts for Twitter/X and LinkedIn with calendar view
 - 🔄 **Multi-Platform Support**: Post to Twitter/X and LinkedIn (extensible to more platforms)
-- 💾 **Local-First**: All data and processing stays on your machine
+- 💾 **Privacy Options**: Choose between fully local processing (llama.cpp) or cloud AI (Google Gemini)
 - 🎨 **Modern UI**: Clean, AgentInbox-inspired interface built with React
 
 ## Architecture
 
 ### Backend (FastAPI)
 - **API Server**: RESTful API for all operations
-- **LLM Service**: Integration with llama.cpp server for content generation
+- **AI Provider System**: Pluggable architecture supporting multiple AI providers:
+  - **Llama.cpp**: Local GGUF models for privacy-focused generation
+  - **Google Gemini**: Cloud-based AI with latest models (Gemini 2.0/2.5)
 - **Scheduler**: Background job scheduler for automated posting
 - **Platform Services**: Twitter/X and LinkedIn API integration
 - **Database**: SQLite for local data storage
@@ -31,16 +33,17 @@ A full-stack local application for generating, editing, and scheduling social me
 
 1. **Python 3.10+**
 2. **Node.js 18+** and npm
-3. **llama.cpp server** running locally
-   - Download and build from [llama.cpp](https://github.com/ggml-org/llama.cpp)
-   - Or use pre-built binaries
-   - Download a GGUF model from Hugging Face
+3. **AI Provider** (choose one or both):
+   - **Llama.cpp** (for local models): Download and build from [llama.cpp](https://github.com/ggml-org/llama.cpp) or use pre-built binaries
+   - **Google Gemini** (cloud): Get API key from [Google AI Studio](https://aistudio.google.com/apikey)
 
 ## Setup
 
-### 1. Start llama.cpp Server
+### 1. Choose Your AI Provider
 
-First, you need to have llama.cpp server running. The app will automatically detect models in `~/Library/Caches/llama.cpp`.
+#### Option A: Llama.cpp (Local, Private)
+
+Start llama.cpp server. The app will automatically detect models in `~/Library/Caches/llama.cpp`.
 
 **Using your existing setup:**
 
@@ -63,6 +66,12 @@ llama-server --model ~/Library/Caches/llama.cpp/qwen2.5-7b-instruct-q5_k_m.gguf 
 ```
 
 The server should be running on `http://localhost:8080` and provide an OpenAI-compatible API at `/v1/chat/completions`.
+
+#### Option B: Google Gemini (Cloud, Latest Models)
+
+1. Get your API key from [Google AI Studio](https://aistudio.google.com/apikey)
+2. Configure it in the app's Settings page under "AI Provider"
+3. Select from models: Gemini 2.0 Flash (recommended), 2.0 Flash Lite, 2.5 Flash, or 2.5 Pro
 
 ### 2. Backend Setup
 
@@ -103,7 +112,21 @@ The frontend will be available at `http://localhost:3000`.
 
 ## Usage
 
-### 1. Configure Platform APIs
+### 1. Configure AI Provider
+
+1. Go to **Settings** in the app
+2. Under "AI Provider", select either:
+   - **Llama.cpp**: For local, private content generation
+   - **Google Gemini**: For cloud-based generation with latest models
+3. If using Google Gemini:
+   - Enter your API key from [Google AI Studio](https://aistudio.google.com/apikey)
+   - Select your preferred model (Gemini 2.0 Flash recommended)
+   - Click "Test Connection" to verify
+4. If using Llama.cpp:
+   - Ensure the server is running on port 8080
+   - Select a model from the model selector
+
+### 2. Configure Platform APIs
 
 Before scheduling posts, you need to configure your platform credentials:
 
@@ -115,23 +138,23 @@ Before scheduling posts, you need to configure your platform credentials:
 4. Test the connection
 5. Enable the platform
 
-### 2. Generate Content
+### 3. Generate Content
 
 1. Go to **Generate** page
 2. Enter a prompt describing the content you want
 3. Adjust temperature and max tokens if needed
-4. Click "Generate Content"
+4. Click "Generate Content" (uses your selected AI provider)
 5. Review and edit the generated content
 6. Save as draft or schedule directly
 
-### 3. Manage Drafts
+### 4. Manage Drafts
 
 1. Go to **Drafts** page
 2. View all your saved drafts
 3. Click on a draft to edit
 4. Save changes or schedule for posting
 
-### 4. Schedule Posts
+### 5. Schedule Posts
 
 1. Go to **Schedule** page
 2. Select a draft or create new content
@@ -174,10 +197,18 @@ Scheduled posts will automatically be published at the specified time.
 Create a `.env` file in the `backend` directory:
 
 ```env
+# Default AI provider (llamacpp or google)
+AI_PROVIDER=llamacpp
+
+# Llama.cpp configuration (if using local models)
 LLAMA_CPP_SERVER_URL=http://localhost:8080
 LLAMA_MODEL_NAME=default
+
+# Database
 DATABASE_URL=sqlite:///./postfarm.db
 ```
+
+Note: Google Gemini API keys are configured through the Settings UI, not environment variables.
 
 ### Model Detection
 
@@ -221,11 +252,18 @@ sqlite3 backend/postfarm.db
 
 ## Troubleshooting
 
-### LLM Server Not Available
+### AI Provider Issues
 
+**For Llama.cpp:**
 - Ensure llama.cpp server is running on port 8080
 - Check `LLAMA_CPP_SERVER_URL` in `.env` matches your server
 - Verify the server is accessible: `curl http://localhost:8080/health`
+
+**For Google Gemini:**
+- Verify your API key is valid at [Google AI Studio](https://aistudio.google.com/apikey)
+- Check that you've selected a model in Settings
+- Use "Test Connection" button to verify connectivity
+- Ensure you have API quota available
 
 ### Posts Not Publishing
 

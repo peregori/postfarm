@@ -96,12 +96,45 @@ export default function Inbox() {
     try {
       if (selectedDraft?.id) {
         // Update existing draft
-        const updated = await draftsApi.update(selectedDraft.id, { content })
+        // Generate title if draft doesn't have one and content is sufficient
+        let titleToSave = selectedDraft.title
+        if (!titleToSave && content && content.trim().length > 10) {
+          try {
+            const titleResponse = await llmApi.generateTitle(content)
+            titleToSave = titleResponse.title
+          } catch (error) {
+            console.error('Title generation failed:', error)
+            // Use fallback
+            titleToSave = content.substring(0, 50)
+            if (content.length > 50) titleToSave += '...'
+          }
+        }
+        
+        const updated = await draftsApi.update(selectedDraft.id, { 
+          content,
+          title: titleToSave 
+        })
         setDrafts(drafts.map(d => d.id === updated.id ? updated : d))
         setSelectedDraft(updated)
       } else {
-        // Create new draft
-        const created = await draftsApi.create({ content })
+        // Create new draft with auto-generated title
+        let titleToSave = null
+        if (content && content.trim().length > 10) {
+          try {
+            const titleResponse = await llmApi.generateTitle(content)
+            titleToSave = titleResponse.title
+          } catch (error) {
+            console.error('Title generation failed:', error)
+            // Use fallback
+            titleToSave = content.substring(0, 50)
+            if (content.length > 50) titleToSave += '...'
+          }
+        }
+        
+        const created = await draftsApi.create({ 
+          content,
+          title: titleToSave 
+        })
         setDrafts([created, ...drafts])
         setSelectedDraft(created)
       }
@@ -295,7 +328,7 @@ export default function Inbox() {
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden h-full">
         {/* Drafts Sidebar */}
-        <div className="w-80 border-r bg-muted/30 overflow-y-auto">
+        <div className="w-64 border-r bg-muted/30 overflow-y-auto">
           <div className="p-4">
             {/* Sort Filter */}
             <div className="mb-4">
@@ -343,12 +376,13 @@ export default function Inbox() {
                 )}
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {filteredDrafts.map((draft) => {
                   const isActive = selectedDraft?.id === draft.id
                   const preview = getPreviewText(draft.content || '')
                   const timeAgo = formatDate(draft.created_at)
                   const hasPrompt = draft.prompt && draft.prompt.trim().length > 0
+                  const draftTitle = draft.title || preview
                   
                   return (
                     <Card
@@ -359,29 +393,28 @@ export default function Inbox() {
                         isActive && "border-primary/50 shadow-sm bg-accent/50"
                       )}
                     >
-                      <CardContent className="p-4">
+                      <CardContent className="p-3">
                         {/* Header with timestamp and AI indicator */}
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-1.5">
                             {hasPrompt && (
-                              <Badge variant="secondary" className="h-4 px-1.5 text-[9px] gap-0.5 opacity-60">
-                                <Sparkles className="h-2.5 w-2.5" />
-                                <span className="hidden sm:inline">AI</span>
+                              <Badge variant="secondary" className="h-3.5 px-1 text-[8px] gap-0.5 opacity-60">
+                                <Sparkles className="h-2 w-2" />
                               </Badge>
                             )}
                           </div>
-                          <span className="text-[10px] text-muted-foreground font-medium">
+                          <span className="text-[9px] text-muted-foreground font-medium">
                             {timeAgo}
                           </span>
                         </div>
                         
-                        {/* Preview content */}
+                        {/* Title or Preview content - single line */}
                         <p className={cn(
-                          "text-sm leading-relaxed line-clamp-3",
+                          "text-xs leading-snug line-clamp-1 font-medium",
                           isActive ? "text-foreground" : "text-muted-foreground",
                           "group-hover:text-foreground transition-colors"
                         )}>
-                          {preview || <span className="italic opacity-50">No content</span>}
+                          {draftTitle || <span className="italic opacity-50">No content</span>}
                         </p>
                       </CardContent>
                     </Card>

@@ -8,19 +8,14 @@ import { Spinner } from '@/components/ui/spinner'
 import { Badge } from '@/components/ui/badge'
 import { showToast } from '@/lib/toast'
 import { Separator } from '@/components/ui/separator'
+import { useHealth } from '../contexts/HealthContext'
 
 export default function Generate() {
   const [content, setContent] = useState('')
   const [prompt, setPrompt] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [serverStatus, setServerStatus] = useState(null)
-
-  useEffect(() => {
-    checkServerStatus()
-    const interval = setInterval(checkServerStatus, 10000)
-    return () => clearInterval(interval)
-  }, [])
+  const { healthStatus } = useHealth()
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -35,22 +30,13 @@ export default function Generate() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [content, saving])
 
-  const checkServerStatus = async () => {
-    try {
-      const health = await llmApi.health()
-      setServerStatus('healthy')
-    } catch (error) {
-      setServerStatus('unavailable')
-    }
-  }
-
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       showToast.warning('Prompt Required', 'Please enter a prompt to generate content.')
       return
     }
 
-    if (serverStatus !== 'healthy') {
+    if (!healthStatus.isHealthy) {
       showToast.error('Server Unavailable', 'Please connect to Llama.cpp server first (see top right).')
       return
     }
@@ -158,7 +144,7 @@ export default function Generate() {
               </label>
             </div>
             
-            {serverStatus === 'unavailable' && (
+            {!healthStatus.isHealthy && (
               <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 flex items-center gap-2 text-sm text-destructive">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span className="text-sm">LLM server not connected. Connect it from the top right menu first.</span>
@@ -181,7 +167,7 @@ export default function Generate() {
               />
               <Button
                 onClick={handleGenerate}
-                disabled={loading || !prompt.trim() || serverStatus !== 'healthy'}
+                disabled={loading || !prompt.trim() || !healthStatus.isHealthy}
                 className="self-start"
               >
                 {loading ? (

@@ -112,15 +112,10 @@ async def get_provider_config(provider_name: str, db: Session = Depends(get_db))
                     "server_url": settings.LLAMA_CPP_SERVER_URL,
                     "model_name": settings.LLAMA_MODEL_NAME,
                 }
-            elif provider_name == "openai":
+            elif provider_name == "google":
                 default_config = {
                     "api_key": None,
-                    "model": "gpt-4o-mini"
-                }
-            elif provider_name == "anthropic":
-                default_config = {
-                    "api_key": None,
-                    "model": "claude-3-5-sonnet-20241022"
+                    "model": "gemini-2.0-flash"
                 }
             
             return {

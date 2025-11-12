@@ -31,6 +31,13 @@ export const llmApi = {
     return response.data
   },
   
+  generateTitle: async (content) => {
+    const response = await client.post('/llm/generate-title', {
+      content,
+    })
+    return response.data
+  },
+  
   health: async () => {
     const response = await client.get('/llm/health')
     return response.data
