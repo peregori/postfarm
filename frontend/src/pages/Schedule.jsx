@@ -630,7 +630,6 @@ function DraggableDraft({ draft, onClick, isSelected }) {
 
   const preview = getPreviewText(draft.content || '')
   const hasPrompt = draft.prompt && draft.prompt.trim().length > 0
-  const draftTitle = draft.title || preview
   
   // Format timestamp
   const formatDate = (dateString) => {
@@ -681,8 +680,9 @@ function DraggableDraft({ draft, onClick, isSelected }) {
             {timeAgo}
           </span>
         </div>
+        {/* Preview content (cleaned, matching preview pane) - single line */}
         <p className="text-xs text-muted-foreground line-clamp-1 leading-snug font-medium">
-          {draftTitle || <span className="italic opacity-50">No content</span>}
+          {preview || <span className="italic opacity-50">No content</span>}
         </p>
       </CardContent>
     </Card>

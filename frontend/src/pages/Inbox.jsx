@@ -382,7 +382,6 @@ export default function Inbox() {
                   const preview = getPreviewText(draft.content || '')
                   const timeAgo = formatDate(draft.created_at)
                   const hasPrompt = draft.prompt && draft.prompt.trim().length > 0
-                  const draftTitle = draft.title || preview
                   
                   return (
                     <Card
@@ -408,13 +407,13 @@ export default function Inbox() {
                           </span>
                         </div>
                         
-                        {/* Title or Preview content - single line */}
+                        {/* Preview content (cleaned, matching preview pane) - single line */}
                         <p className={cn(
                           "text-xs leading-snug line-clamp-1 font-medium",
                           isActive ? "text-foreground" : "text-muted-foreground",
                           "group-hover:text-foreground transition-colors"
                         )}>
-                          {draftTitle || <span className="italic opacity-50">No content</span>}
+                          {preview || <span className="italic opacity-50">No content</span>}
                         </p>
                       </CardContent>
                     </Card>
