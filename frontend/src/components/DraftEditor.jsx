@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Sparkles, Eye, X, Send, Loader2, Check, XCircle, ArrowRight, CheckCircle, Globe } from 'lucide-react'
+import { Sparkles, Eye, X, Send, Loader2, Check, XCircle, ArrowRight, CheckCircle, Globe, Undo2, Redo2, Copy } from 'lucide-react'
 import * as simpleIcons from 'simple-icons'
 import { llmApi } from '../api/client'
 import { Button } from '@/components/ui/button'
@@ -62,6 +62,81 @@ export default function DraftEditor({
   const [promptHasMultipleLines, setPromptHasMultipleLines] = useState(false)
   const [editHasMultipleLines, setEditHasMultipleLines] = useState(false)
   const [acceptedSegments, setAcceptedSegments] = useState(new Set()) // Track which diff segments are accepted
+  
+  // Undo/Redo state (20-level history)
+  const [historyStack, setHistoryStack] = useState([])
+  const [historyIndex, setHistoryIndex] = useState(-1)
+  const [isUndoRedo, setIsUndoRedo] = useState(false)
+  const historyTimeoutRef = useRef(null)
+
+  // Record history for undo/redo (20-level limit)
+  const recordHistory = (newContent) => {
+    if (isUndoRedo) return // Don't record during undo/redo operations
+    
+    setHistoryStack(prev => {
+      // Remove any future history if we're not at the end
+      const newStack = prev.slice(0, historyIndex + 1)
+      // Add new entry
+      newStack.push(newContent)
+      // Maintain 20-level limit (FIFO)
+      if (newStack.length > 20) {
+        newStack.shift()
+        setHistoryIndex(19) // Adjust index since we removed first item
+        return newStack
+      }
+      setHistoryIndex(newStack.length - 1)
+      return newStack
+    })
+  }
+
+  // Debounced history recording (500ms delay for word-by-word undo/redo)
+  const recordHistoryDebounced = (newContent) => {
+    if (isUndoRedo) return
+    
+    // Clear existing timeout
+    if (historyTimeoutRef.current) {
+      clearTimeout(historyTimeoutRef.current)
+    }
+    
+    // Set new timeout for history recording
+    historyTimeoutRef.current = setTimeout(() => {
+      recordHistory(newContent)
+    }, 500)
+  }
+
+  // Undo handler
+  const handleUndo = () => {
+    // Commit any pending history before undo
+    if (historyTimeoutRef.current) {
+      clearTimeout(historyTimeoutRef.current)
+      recordHistory(content)
+    }
+    
+    if (historyIndex > 0) {
+      setIsUndoRedo(true)
+      const newIndex = historyIndex - 1
+      setHistoryIndex(newIndex)
+      setContent(historyStack[newIndex])
+      setTimeout(() => setIsUndoRedo(false), 0)
+    }
+  }
+
+  // Redo handler
+  const handleRedo = () => {
+    // Commit any pending history before redo
+    if (historyTimeoutRef.current) {
+      clearTimeout(historyTimeoutRef.current)
+      recordHistory(content)
+    }
+    
+    if (historyIndex < historyStack.length - 1) {
+      setIsUndoRedo(true)
+      const newIndex = historyIndex + 1
+      setHistoryIndex(newIndex)
+      setContent(historyStack[newIndex])
+      setTimeout(() => setIsUndoRedo(false), 0)
+    }
+  }
 
   useEffect(() => {
     if (draft) {
@@ -69,6 +144,20 @@ export default function DraftEditor({
       setContent(draftContent)
       setPendingAiChange(null)
       setAcceptedSegments(new Set())
+      // Initialize history with the draft content
+      setHistoryStack([draftContent])
+      setHistoryIndex(0)
+      // Clear any pending history timeout
+      if (historyTimeoutRef.current) {
+        clearTimeout(historyTimeoutRef.current)
+      }
+    }
+    
+    return () => {
+      // Clean up history timeout on unmount
+      if (historyTimeoutRef.current) {
+        clearTimeout(historyTimeoutRef.current)
+      }
     }
   }, [draft?.id])
 
@@ -140,6 +229,30 @@ export default function DraftEditor({
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Cmd+Z / Ctrl+Z: Undo
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        handleUndo()
+        return
+      }
+      
+      // Cmd+Shift+Z / Ctrl+Shift+Z: Redo
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'z') {
+        e.preventDefault()
+        handleRedo()
+        return
+      }
+      
+      // Cmd+A / Ctrl+A: Select all in active textarea
+      if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+        // Only handle if focus is in the main textarea
+        if (textareaRef.current && document.activeElement === textareaRef.current) {
+          e.preventDefault()
+          textareaRef.current.select()
+          return
+        }
+      }
+      
       // Cmd+K / Ctrl+K: Toggle generation prompt
       if ((e.metaKey || e.ctrlKey) && e.key === 'k' && !e.shiftKey) {
         e.preventDefault()
@@ -179,7 +292,7 @@ export default function DraftEditor({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showGeneratePrompt, showEditPrompt, generatePrompt, editInstruction, pendingAiChange])
+  }, [showGeneratePrompt, showEditPrompt, generatePrompt, editInstruction, pendingAiChange, historyIndex, historyStack])
 
   // Platform detection on prompt change
   useEffect(() => {
@@ -359,6 +472,10 @@ export default function DraftEditor({
         newContent: newContent
       })
     } else {
+      // Record history for manual edits (debounced for word-by-word undo)
+      if (!isUndoRedo) {
+        recordHistoryDebounced(newContent)
+      }
       setContent(newContent)
     }
     // Clear selection when content changes
@@ -597,6 +714,9 @@ export default function DraftEditor({
         .join('\n')
     }
     
+    // Record history for AI acceptance (treat as single atomic operation)
+    recordHistory(finalContent)
+    
     setContent(finalContent)
     setPendingAiChange(null)
     setAcceptedSegments(new Set())
@@ -717,27 +837,29 @@ export default function DraftEditor({
             </TabsList>
           </Tabs>
 
-          {/* Writing Stats */}
-          {content.trim() && (
-            <>
-              <Separator orientation="vertical" className="h-4" />
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <span>{content.length} {content.length === 1 ? 'char' : 'chars'}</span>
-                {wordCount > 0 && (
-                  <span className="text-muted-foreground/70">·</span>
-                )}
-                {wordCount > 0 && (
-                  <span>{wordCount} {wordCount === 1 ? 'w' : 'w'}</span>
-                )}
-                {readingTime > 0 && (
-                  <span className="text-muted-foreground/70">·</span>
-                )}
-                {readingTime > 0 && (
-                  <span>{readingTime}m read</span>
-                )}
-              </div>
-            </>
-          )}
+          {/* Undo/Redo Buttons */}
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleUndo}
+              disabled={historyIndex <= 0}
+              className="h-7 w-7 p-0"
+              title="Undo (⌘Z)"
+            >
+              <Undo2 className="h-4 w-4" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleRedo}
+              disabled={historyIndex >= historyStack.length - 1}
+              className="h-7 w-7 p-0"
+              title="Redo (⌘⇧Z)"
+            >
+              <Redo2 className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         {/* Platform Counters */}
@@ -1110,9 +1232,31 @@ export default function DraftEditor({
             </div>
 
             <div className="w-[2px] bg-border shrink-0 absolute left-1/2 inset-y-0 -translate-x-1/2" />
-            <div className="w-1/2 flex flex-col rounded-lg border bg-background shadow-sm" style={{ height: '100%', minHeight: 0 }}>
+            <div className="w-1/2 flex flex-col rounded-lg border bg-background shadow-sm relative" style={{ height: '100%', minHeight: 0 }}>
+              {/* Copy Button - Top Right of Preview Panel */}
+              {previewContent && (
+                <div className="absolute top-4 right-4 z-20">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 rounded-md hover:bg-accent/50 border border-border/50 bg-background/80 backdrop-blur-sm"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(previewContent)
+                        showToast.success('Copied', 'Content copied to clipboard')
+                      } catch (error) {
+                        console.error('Failed to copy:', error)
+                        showToast.error('Copy Failed', 'Failed to copy content to clipboard')
+                      }
+                    }}
+                    title="Copy to clipboard"
+                  >
+                    <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </div>
+              )}
               <div 
-                className="p-4 overflow-y-auto flex-1 scrollbar-thin select-text" 
+                className="p-4 pr-12 overflow-y-auto flex-1 scrollbar-thin select-text" 
                 style={{ height: '100%', maxHeight: '100%', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 onMouseUp={(e) => {
                   // Enable text selection in preview panel
@@ -1250,6 +1394,24 @@ export default function DraftEditor({
       {showActions && (
         <div className="flex items-center justify-between p-4 border-t bg-muted/30">
           <div className="flex items-center gap-2">
+            {/* Writing Stats */}
+            {content.trim() && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <span>{content.length} {content.length === 1 ? 'char' : 'characters'}</span>
+                {wordCount > 0 && (
+                  <span className="text-muted-foreground/70">·</span>
+                )}
+                {wordCount > 0 && (
+                  <span>{wordCount} {wordCount === 1 ? 'w' : 'words'}</span>
+                )}
+                {readingTime > 0 && (
+                  <span className="text-muted-foreground/70">·</span>
+                )}
+                {readingTime > 0 && (
+                  <span>{readingTime} minutes read</span>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-1.5">
             {!pendingAiChange && (
