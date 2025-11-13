@@ -380,6 +380,12 @@ export default function DraftEditor({
     
     // Determine final platform: detected > manual > general
     const finalPlatform = getFinalPlatform(detectedPlatform, manualPlatform)
+    
+    // Auto-switch to detected platform if one was detected
+    if (detectedPlatform) {
+      setManualPlatform(detectedPlatform)
+    }
+    
     setLastUsedPlatform(finalPlatform)
     
     try {
@@ -830,18 +836,6 @@ export default function DraftEditor({
                       <path d={simpleIcons.siX.path} />
                     </svg>
                   </button>
-                  {detectedPlatform && detectedPlatform !== manualPlatform && (
-                    <>
-                      <div className="h-3 w-px bg-border" />
-                      <button
-                        onClick={() => setManualPlatform(detectedPlatform)}
-                        className="h-4 w-4 flex items-center justify-center text-[9px] rounded-full hover:bg-muted/50 transition-colors"
-                        title={`Switch to detected: ${detectedPlatform}`}
-                      >
-                        🔍
-                      </button>
-                    </>
-                  )}
                 </div>
               </div>
               
@@ -885,7 +879,7 @@ export default function DraftEditor({
                       }}
                       title="Generate with AI (⌘K)"
                     >
-                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                      <span className="text-xs text-muted-foreground">AI</span>
                     </Button>
                   </div>
                 )}
@@ -1198,23 +1192,11 @@ export default function DraftEditor({
                     style={{ color: manualPlatform === 'twitter' ? '#000000' : 'hsl(var(--muted-foreground))' }}
                     preserveAspectRatio="xMidYMid meet"
                   >
-                    <path d={simpleIcons.siX.path} />
-                  </svg>
-                </button>
-                {detectedPlatform && detectedPlatform !== manualPlatform && (
-                  <>
-                    <div className="h-3 w-px bg-border" />
-                    <button
-                      onClick={() => setManualPlatform(detectedPlatform)}
-                      className="h-4 w-4 flex items-center justify-center text-[9px] rounded-full hover:bg-muted/50 transition-colors"
-                      title={`Switch to detected: ${detectedPlatform}`}
-                    >
-                      🔍
-                    </button>
-                  </>
-                )}
+                      <path d={simpleIcons.siX.path} />
+                    </svg>
+                  </button>
+                </div>
               </div>
-            </div>
             
             <div className="prose prose-lg dark:prose-invert max-w-none mx-auto select-text">
               <div className="whitespace-pre-wrap text-foreground leading-relaxed select-text">
