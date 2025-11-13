@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { showToast } from '@/lib/toast'
-import { cleanLLMArtifacts, checkPlatformLimits } from '@/lib/contentCleaner'
+import { cleanLLMArtifacts, checkPlatformLimits, getPlatformMaxTokens } from '@/lib/contentCleaner'
 import { Input } from '@/components/ui/input'
 import { Kbd } from '@/components/ui/kbd'
 import { calculateDiff, renderDiff } from '@/lib/diffHelper'
@@ -389,9 +389,12 @@ export default function DraftEditor({
     setLastUsedPlatform(finalPlatform)
     
     try {
+      // Calculate platform-specific max_tokens based on character limits
+      const maxTokens = getPlatformMaxTokens(finalPlatform)
+      
       const response = await llmApi.generate(generatePrompt, {
         temperature: 0.7,
-        max_tokens: 2000,
+        max_tokens: maxTokens,
         platform: finalPlatform,
       })
 
@@ -718,19 +721,19 @@ export default function DraftEditor({
           {content.trim() && (
             <>
               <Separator orientation="vertical" className="h-4" />
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <span>{content.length} {content.length === 1 ? 'char' : 'chars'}</span>
                 {wordCount > 0 && (
                   <span className="text-muted-foreground/70">·</span>
                 )}
                 {wordCount > 0 && (
-                  <span>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
+                  <span>{wordCount} {wordCount === 1 ? 'w' : 'w'}</span>
                 )}
                 {readingTime > 0 && (
                   <span className="text-muted-foreground/70">·</span>
                 )}
                 {readingTime > 0 && (
-                  <span>{readingTime} {readingTime === 1 ? 'min read' : 'min read'}</span>
+                  <span>{readingTime}m read</span>
                 )}
               </div>
             </>
@@ -1089,14 +1092,16 @@ export default function DraftEditor({
                       }
                     }}
                     placeholder={showGeneratePrompt || showEditPrompt ? "" : "Start writing or press ⌘K to generate"}
-                    className="w-full resize-none text-sm font-normal border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none ring-0 ring-offset-0 rounded-none p-0 bg-transparent pr-12"
+                    className="w-full resize-none text-sm font-normal border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none ring-0 ring-offset-0 rounded-none p-0 bg-transparent pr-12 scrollbar-thin"
                     disabled={isGenerating}
                     style={{ 
                       fontFamily: 'inherit',
                       lineHeight: 'inherit',
                       height: '100%',
                       outline: 'none',
-                      boxShadow: 'none'
+                      boxShadow: 'none',
+                      scrollbarWidth: 'none',
+                      msOverflowStyle: 'none'
                     }}
                   />
                 )}
@@ -1108,7 +1113,7 @@ export default function DraftEditor({
             <div className="w-1/2 flex flex-col rounded-lg border bg-background shadow-sm" style={{ height: '100%', minHeight: 0 }}>
               <div 
                 className="p-4 overflow-y-auto flex-1 scrollbar-thin select-text" 
-                style={{ height: '100%', maxHeight: '100%' }}
+                style={{ height: '100%', maxHeight: '100%', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 onMouseUp={(e) => {
                   // Enable text selection in preview panel
                   setTimeout(() => handleTextSelection(), 10)
@@ -1144,7 +1149,8 @@ export default function DraftEditor({
 
         {viewMode === 'preview' && (
           <div 
-            className="h-full overflow-y-auto p-6 select-text relative"
+            className="h-full overflow-y-auto p-6 select-text relative scrollbar-thin"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             onMouseUp={(e) => {
               // Enable text selection in preview mode
               setTimeout(() => handleTextSelection(), 10)

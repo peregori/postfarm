@@ -38,7 +38,7 @@ class GoogleProvider(BaseAIProvider):
         if system_prompt is None:
             # Use platform-specific system prompts
             if platform == "twitter":
-                system_prompt = """You are a social media content creator for Twitter/X. Create concise, engaging tweets under 280 characters. Use appropriate tone for the platform."""
+                system_prompt = """Write a Twitter post in a positive, energetic, and assertive tone that feels smart and engaging. Use clear, concise language as if giving valuable advice or sharing an insight directly with a friend. Keep the message abstract so it can be applied to any topic or perspective. Do not use hashtags or emojis under any circumstances. Maximum length: 280 characters."""
             elif platform == "linkedin":
                 system_prompt = """You are a LinkedIn ghostwriter creating viral, engaging posts. Write in first person with a confident, upbeat, savvy tone. Use this structure naturally (don't number it or mention steps):
 - Bold hook with metrics/results
@@ -47,11 +47,11 @@ class GoogleProvider(BaseAIProvider):
 - Show expertise through experience
 - Surprising or unconventional insight
 - Actionable method or framework
-- Bullet points for metrics/outcomes (use ⇳ for visual emphasis)
+- Bullet points for metrics/outcomes (use ↳, →, •, for visual emphasis)
 - Positive, energizing conclusion
 - Call-to-action for engagement
 
-CRITICAL: Never include hashtags, emojis, meta-commentary, or checklist confirmations. Output ONLY the post content. Max 250 words."""
+CRITICAL: Never include hashtags, emojis, meta-commentary, "—" dashes, or checklist confirmations. Output ONLY the post content. Max 250 words."""
         
         try:
             # Build contents list with system prompt and user prompt
@@ -67,10 +67,16 @@ CRITICAL: Never include hashtags, emojis, meta-commentary, or checklist confirma
             
             contents.append(user_prompt)
             
+            # Adjust max_tokens based on platform to match character limits
+            # Twitter: 280 chars ≈ 70 tokens, but we get ~100 from frontend
+            # LinkedIn: 3000 chars ≈ 750 tokens, but we get ~800 from frontend
+            # Use the provided max_tokens (already calculated by frontend)
+            effective_max_tokens = max_tokens
+            
             # Configure generation parameters
             config = GenerateContentConfig(
                 temperature=temperature,
-                max_output_tokens=max_tokens
+                max_output_tokens=effective_max_tokens
             )
             
             # Generate content using async client

@@ -26,7 +26,7 @@ class LlamaCppProvider(BaseAIProvider):
         if system_prompt is None:
             # Use platform-specific system prompts
             if platform == "twitter":
-                system_prompt = """You are a social media content creator for Twitter/X. Create concise, engaging tweets under 280 characters. Use appropriate tone for the platform."""
+                system_prompt = """Write a Twitter post in a positive, energetic, and assertive tone that feels smart and engaging. Use clear, concise language as if giving valuable advice or sharing an insight directly with a friend. Keep the message abstract so it can be applied to any topic or perspective. Do not use hashtags or emojis under any circumstances. Maximum length: 280 characters."""
             elif platform == "linkedin":
                 system_prompt = """You are a LinkedIn ghostwriter creating viral, engaging posts. Write in first person with a confident, upbeat, savvy tone. Use this structure naturally (don't number it or mention steps):
 - Bold hook with metrics/results
@@ -35,11 +35,11 @@ class LlamaCppProvider(BaseAIProvider):
 - Show expertise through experience
 - Surprising or unconventional insight
 - Actionable method or framework
-- Bullet points for metrics/outcomes (use ⇳ for visual emphasis)
+- Bullet points for metrics/outcomes (use ↳, →, •, for visual emphasis)
 - Positive, energizing conclusion
 - Call-to-action for engagement
 
-CRITICAL: Never include hashtags, emojis, meta-commentary, or checklist confirmations. Output ONLY the post content. Max 250 words."""
+CRITICAL: Never include hashtags, emojis, meta-commentary, "—" dashes, or checklist confirmations. Output ONLY the post content. Max 250 words."""
         
         # For reasoning models, add explicit instruction to output directly
         # For LinkedIn, integrate the user prompt as the post topic
@@ -58,10 +58,19 @@ CRITICAL: Never include hashtags, emojis, meta-commentary, or checklist confirma
         
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
-                # Build request payload
-                if max_tokens < 3000:
-                    effective_max_tokens = max(max_tokens * 2, 3000)
+                # Adjust max_tokens based on platform to match character limits
+                # The frontend now sends platform-specific max_tokens:
+                # Twitter: ~100 tokens (for 280 char limit)
+                # LinkedIn: ~800 tokens (for 3000 char limit)
+                # Don't multiply for Twitter - it's already correctly sized
+                if platform == "twitter":
+                    # Twitter needs small token limit to match 280 char limit
+                    effective_max_tokens = min(max_tokens, 150)  # Cap at 150 to prevent over-generation
+                elif platform == "linkedin":
+                    # LinkedIn can use more tokens, but don't multiply unnecessarily
+                    effective_max_tokens = min(max_tokens, 1000)  # Cap at 1000
                 else:
+                    # For other platforms, use the provided max_tokens
                     effective_max_tokens = max_tokens
                 
                 payload = {
