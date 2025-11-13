@@ -16,6 +16,7 @@ class GenerateRequest(BaseModel):
     max_tokens: Optional[int] = 500
     temperature: Optional[float] = 0.7
     system_prompt: Optional[str] = None
+    platform: Optional[str] = None  # "twitter", "linkedin", "general", or null
 
 class GenerateResponse(BaseModel):
     content: str
@@ -44,7 +45,8 @@ async def generate_content(request: GenerateRequest, llm_service: LLMService = D
             prompt=request.prompt,
             max_tokens=request.max_tokens,
             temperature=request.temperature,
-            system_prompt=request.system_prompt
+            system_prompt=request.system_prompt,
+            platform=request.platform
         )
         return GenerateResponse(content=content, prompt=request.prompt)
     except ConnectionError as e:

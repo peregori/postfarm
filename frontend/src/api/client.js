@@ -18,6 +18,7 @@ export const llmApi = {
       max_tokens: options.max_tokens || 500,
       temperature: options.temperature || 0.7,
       system_prompt: options.system_prompt,
+      platform: options.platform || null,
     })
     return response.data
   },

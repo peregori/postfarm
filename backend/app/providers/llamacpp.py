@@ -18,11 +18,19 @@ class LlamaCppProvider(BaseAIProvider):
         prompt: str,
         max_tokens: int = 500,
         temperature: float = 0.7,
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        platform: Optional[str] = None
     ) -> str:
         """Generate content using local llama.cpp server"""
         if system_prompt is None:
-            system_prompt = """You are a social media content creator. 
+            # Use platform-specific system prompts
+            if platform == "twitter":
+                system_prompt = """You are a social media content creator for Twitter/X. Create concise, engaging tweets under 280 characters. Use appropriate tone for the platform."""
+            elif platform == "linkedin":
+                system_prompt = """You are a social media content creator for LinkedIn. Create professional, thought-provoking posts suitable for a business network. Keep content engaging and authentic."""
+            else:
+                # General/default prompt
+                system_prompt = """You are a social media content creator. 
 Create engaging, authentic content for professional platforms like Twitter and LinkedIn.
 Keep responses concise and platform-appropriate."""
         

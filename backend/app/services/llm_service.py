@@ -22,7 +22,8 @@ class LLMService:
         prompt: str,
         system_prompt: str,
         max_tokens: int,
-        temperature: float
+        temperature: float,
+        platform: Optional[str] = None
     ) -> str:
         """Generate a cache key from prompt and parameters"""
         # Create a hash from the request parameters
@@ -31,7 +32,8 @@ class LLMService:
             "prompt": prompt,
             "system_prompt": system_prompt,
             "max_tokens": max_tokens,
-            "temperature": round(temperature, 2)
+            "temperature": round(temperature, 2),
+            "platform": platform or "general"
         }
         cache_string = json.dumps(cache_data, sort_keys=True)
         return hashlib.sha256(cache_string.encode()).hexdigest()
@@ -77,7 +79,8 @@ class LLMService:
         prompt: str, 
         max_tokens: int = 500,
         temperature: float = 0.7,
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        platform: Optional[str] = None
     ) -> str:
         """
         Generate content using the configured AI provider
@@ -87,12 +90,13 @@ class LLMService:
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature
             system_prompt: Optional system prompt for instructions
+            platform: Optional platform ("twitter", "linkedin", "general", or None)
             
         Returns:
             Generated text content
         """
         # Check cache first
-        cache_key = self._get_cache_key(prompt, system_prompt or "", max_tokens, temperature)
+        cache_key = self._get_cache_key(prompt, system_prompt or "", max_tokens, temperature, platform)
         cached_content = self._get_cached_content(cache_key)
         if cached_content is not None:
             return cached_content
@@ -103,7 +107,8 @@ class LLMService:
             prompt=prompt,
             max_tokens=max_tokens,
             temperature=temperature,
-            system_prompt=system_prompt
+            system_prompt=system_prompt,
+            platform=platform
         )
         
         # Cache the result

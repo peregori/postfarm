@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Sparkles, Eye, X, Send, Loader2, Check, XCircle, ArrowRight, CheckCircle } from 'lucide-react'
+import { Sparkles, Eye, X, Send, Loader2, Check, XCircle, ArrowRight, CheckCircle, Globe } from 'lucide-react'
 import * as simpleIcons from 'simple-icons'
 import { llmApi } from '../api/client'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,15 @@ import { Input } from '@/components/ui/input'
 import { Kbd } from '@/components/ui/kbd'
 import { calculateDiff, renderDiff } from '@/lib/diffHelper'
 import { cn } from '@/lib/utils'
+import { detectPlatform, getFinalPlatform } from '@/lib/platformDetector'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
 
 export default function DraftEditor({
   draft,
@@ -36,6 +45,11 @@ export default function DraftEditor({
   const [generatePrompt, setGeneratePrompt] = useState('')
   const [showEditPrompt, setShowEditPrompt] = useState(false)
   const [editInstruction, setEditInstruction] = useState('')
+  
+  // Platform states
+  const [manualPlatform, setManualPlatform] = useState('linkedin') // Default to LinkedIn
+  const [detectedPlatform, setDetectedPlatform] = useState(null)
+  const [lastUsedPlatform, setLastUsedPlatform] = useState(null)
   
   // Selection states
   const [selectedText, setSelectedText] = useState('')
@@ -167,6 +181,16 @@ export default function DraftEditor({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [showGeneratePrompt, showEditPrompt, generatePrompt, editInstruction, pendingAiChange])
 
+  // Platform detection on prompt change
+  useEffect(() => {
+    if (generatePrompt.trim()) {
+      const detected = detectPlatform(generatePrompt)
+      setDetectedPlatform(detected)
+    } else {
+      setDetectedPlatform(null)
+    }
+  }, [generatePrompt])
+
   // Auto-focus prompt textareas when opened
   useEffect(() => {
     if (showGeneratePrompt && promptTextareaRef.current) {
@@ -189,6 +213,7 @@ export default function DraftEditor({
     setShowGeneratePrompt(false)
     setGeneratePrompt('')
     setPromptHasMultipleLines(false)
+    setDetectedPlatform(null)
   }
 
   // Helper to close edit prompt
@@ -353,10 +378,15 @@ export default function DraftEditor({
     
     const originalContent = content
     
+    // Determine final platform: detected > manual > general
+    const finalPlatform = getFinalPlatform(detectedPlatform, manualPlatform)
+    setLastUsedPlatform(finalPlatform)
+    
     try {
       const response = await llmApi.generate(generatePrompt, {
         temperature: 0.7,
         max_tokens: 2000,
+        platform: finalPlatform,
       })
 
       if (response?.content) {
@@ -373,7 +403,7 @@ export default function DraftEditor({
         setPendingAiChange(change)
         
         setGeneratePrompt('')
-        showToast.success('Content Generated', 'Review the preview panel on the right and accept or discard.')
+        showToast.success('Content Generated', `Generated for ${finalPlatform}. Review the preview panel on the right and accept or discard.`)
       }
     } catch (error) {
       console.error('Generation failed:', error)
@@ -758,6 +788,67 @@ export default function DraftEditor({
         {viewMode === 'split' && (
           <div className="flex flex-1 overflow-hidden min-h-0 relative gap-4 p-2 bg-muted/30">
             <div className="flex flex-col w-1/2 overflow-hidden min-w-0 relative rounded-lg border bg-background shadow-sm">
+              {/* Platform Switch - Bottom Left Corner, minimal */}
+              <div className="absolute bottom-2 left-2 z-30">
+                <div className="flex items-center gap-0 bg-background/95 backdrop-blur-sm border rounded-full px-1 py-1 shadow-sm">
+                  <button
+                    onClick={() => setManualPlatform('linkedin')}
+                    className={cn(
+                      "h-5 w-5 flex items-center justify-center rounded-full transition-all",
+                      manualPlatform === 'linkedin'
+                        ? "bg-foreground"
+                        : "hover:bg-muted/50"
+                    )}
+                    title="LinkedIn"
+                  >
+                    <svg
+                      role="img"
+                      viewBox="0 0 24 24"
+                      className="h-3 w-3"
+                      fill="currentColor"
+                      style={{ color: manualPlatform === 'linkedin' ? 'hsl(var(--background))' : 'hsl(var(--foreground))' }}
+                      preserveAspectRatio="xMidYMid meet"
+                    >
+                      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                    </svg>
+                  </button>
+                  <div className="h-3 w-px bg-border" />
+                  <button
+                    onClick={() => setManualPlatform('twitter')}
+                    className={cn(
+                      "h-5 w-5 flex items-center justify-center rounded-full transition-all",
+                      manualPlatform === 'twitter'
+                        ? "bg-foreground"
+                        : "hover:bg-muted/50"
+                    )}
+                    title="Twitter/X"
+                  >
+                    <svg
+                      role="img"
+                      viewBox="0 0 24 24"
+                      className="h-2.5 w-2.5"
+                      fill="currentColor"
+                      style={{ color: manualPlatform === 'twitter' ? 'hsl(var(--background))' : 'hsl(var(--foreground))' }}
+                      preserveAspectRatio="xMidYMid meet"
+                    >
+                      <path d={simpleIcons.siX.path} />
+                    </svg>
+                  </button>
+                  {detectedPlatform && detectedPlatform !== manualPlatform && (
+                    <>
+                      <div className="h-3 w-px bg-border" />
+                      <button
+                        onClick={() => setManualPlatform(detectedPlatform)}
+                        className="h-4 w-4 flex items-center justify-center text-[9px] rounded-full hover:bg-muted/50 transition-colors"
+                        title={`Switch to detected: ${detectedPlatform}`}
+                      >
+                        🔍
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+              
               <div className="flex-1 p-4 overflow-y-auto min-h-0 relative scrollbar-thin">
                 {/* Global Discard/Accept buttons - placed at top of diff content */}
                 {pendingAiChange && diffSegments.length > 0 && (
@@ -804,7 +895,6 @@ export default function DraftEditor({
                 )}
                 {showGeneratePrompt && (
                   <div className="mb-3 relative">
-                    <div className="relative">
                       <Textarea
                         ref={promptTextareaRef}
                         value={generatePrompt}
@@ -839,7 +929,6 @@ export default function DraftEditor({
                           <ArrowRight className="h-3.5 w-3.5 text-primary" />
                         )}
                       </Button>
-                    </div>
                   </div>
                 )}
 
@@ -1065,7 +1154,7 @@ export default function DraftEditor({
 
         {viewMode === 'preview' && (
           <div 
-            className="h-full overflow-y-auto p-6 select-text"
+            className="h-full overflow-y-auto p-6 select-text relative"
             onMouseUp={(e) => {
               // Enable text selection in preview mode
               setTimeout(() => handleTextSelection(), 10)
@@ -1074,6 +1163,67 @@ export default function DraftEditor({
               setTimeout(() => handleTextSelection(), 10)
             }}
           >
+            {/* Platform Switch - Bottom Left Corner (Preview Mode) */}
+            <div className="absolute bottom-3 left-3 z-30">
+              <div className="flex items-center gap-0 bg-background/95 backdrop-blur-sm border rounded-full px-1 py-1 shadow-sm">
+                <button
+                  onClick={() => setManualPlatform('linkedin')}
+                  className={cn(
+                    "h-5 w-5 flex items-center justify-center rounded-full transition-all",
+                    manualPlatform === 'linkedin'
+                      ? "bg-foreground"
+                      : "hover:bg-muted/50"
+                  )}
+                  title="LinkedIn"
+                >
+                  <svg
+                    role="img"
+                    viewBox="0 0 24 24"
+                    className="h-3 w-3"
+                    fill="currentColor"
+                    style={{ color: manualPlatform === 'linkedin' ? 'hsl(var(--background))' : 'hsl(var(--foreground))' }}
+                    preserveAspectRatio="xMidYMid meet"
+                  >
+                    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                  </svg>
+                </button>
+                <div className="h-3 w-px bg-border" />
+                <button
+                  onClick={() => setManualPlatform('twitter')}
+                  className={cn(
+                    "h-5 w-5 flex items-center justify-center rounded-full transition-all",
+                    manualPlatform === 'twitter'
+                      ? "bg-foreground"
+                      : "hover:bg-muted/50"
+                  )}
+                  title="Twitter/X"
+                >
+                  <svg
+                    role="img"
+                    viewBox="0 0 24 24"
+                    className="h-2.5 w-2.5"
+                    fill="currentColor"
+                    style={{ color: manualPlatform === 'twitter' ? 'hsl(var(--background))' : 'hsl(var(--foreground))' }}
+                    preserveAspectRatio="xMidYMid meet"
+                  >
+                    <path d={simpleIcons.siX.path} />
+                  </svg>
+                </button>
+                {detectedPlatform && detectedPlatform !== manualPlatform && (
+                  <>
+                    <div className="h-3 w-px bg-border" />
+                    <button
+                      onClick={() => setManualPlatform(detectedPlatform)}
+                      className="h-4 w-4 flex items-center justify-center text-[9px] rounded-full hover:bg-muted/50 transition-colors"
+                      title={`Switch to detected: ${detectedPlatform}`}
+                    >
+                      🔍
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+            
             <div className="prose prose-lg dark:prose-invert max-w-none mx-auto select-text">
               <div className="whitespace-pre-wrap text-foreground leading-relaxed select-text">
                 {previewContent || <span className="text-muted-foreground italic">No content to preview</span>}

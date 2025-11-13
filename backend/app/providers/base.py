@@ -10,7 +10,8 @@ class BaseAIProvider(ABC):
         prompt: str,
         max_tokens: int = 500,
         temperature: float = 0.7,
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        platform: Optional[str] = None
     ) -> str:
         """
         Generate content from a prompt
@@ -20,6 +21,7 @@ class BaseAIProvider(ABC):
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature
             system_prompt: Optional system prompt
+            platform: Optional platform ("twitter", "linkedin", "general", or None)
             
         Returns:
             Generated text content
