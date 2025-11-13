@@ -1,3 +1,5 @@
+import json
+import re
 from typing import Optional
 from app.providers.base import BaseAIProvider
 
@@ -38,19 +40,32 @@ class GoogleProvider(BaseAIProvider):
             if platform == "twitter":
                 system_prompt = """You are a social media content creator for Twitter/X. Create concise, engaging tweets under 280 characters. Use appropriate tone for the platform."""
             elif platform == "linkedin":
-                system_prompt = """You are a social media content creator for LinkedIn. Create professional, thought-provoking posts suitable for a business network. Keep content engaging and authentic."""
-            else:
-                # General/default prompt
-                system_prompt = """You are a social media content creator. 
-Create engaging, authentic content for professional platforms like Twitter and LinkedIn.
-Keep responses concise and platform-appropriate."""
+                system_prompt = """You are a LinkedIn ghostwriter creating viral, engaging posts. Write in first person with a confident, upbeat, savvy tone. Use this structure naturally (don't number it or mention steps):
+- Bold hook with metrics/results
+- Free value or key insight
+- Brief origin story or realization
+- Show expertise through experience
+- Surprising or unconventional insight
+- Actionable method or framework
+- Bullet points for metrics/outcomes (use ⇳ for visual emphasis)
+- Positive, energizing conclusion
+- Call-to-action for engagement
+
+CRITICAL: Never include hashtags, emojis, meta-commentary, or checklist confirmations. Output ONLY the post content. Max 250 words."""
         
         try:
             # Build contents list with system prompt and user prompt
             contents = []
             if system_prompt:
                 contents.append(system_prompt)
-            contents.append(prompt)
+            
+            # For LinkedIn, integrate the user prompt as the post topic
+            if platform == "linkedin":
+                user_prompt = f"Post Topic: {prompt}\n\nCreate a LinkedIn post following the structure provided. Output the post content directly."
+            else:
+                user_prompt = prompt
+            
+            contents.append(user_prompt)
             
             # Configure generation parameters
             config = GenerateContentConfig(
@@ -70,7 +85,37 @@ Keep responses concise and platform-appropriate."""
             if not content:
                 raise ValueError("Google Gemini returned empty content")
             
-            return content.strip()
+            content = content.strip()
+            
+            # For LinkedIn, try to extract JSON if present
+            if platform == "linkedin" and content:
+                # Try to parse JSON response
+                try:
+                    # Look for JSON block in the content (handle nested braces)
+                    json_start = content.find('{')
+                    if json_start != -1:
+                        # Find matching closing brace
+                        brace_count = 0
+                        json_end = -1
+                        for i in range(json_start, len(content)):
+                            if content[i] == '{':
+                                brace_count += 1
+                            elif content[i] == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    json_end = i + 1
+                                    break
+                        
+                        if json_end > json_start:
+                            json_str = content[json_start:json_end]
+                            parsed = json.loads(json_str)
+                            if "linkedin_post" in parsed:
+                                content = parsed["linkedin_post"]
+                except (json.JSONDecodeError, KeyError, ValueError):
+                    # If JSON parsing fails, use content as-is
+                    pass
+            
+            return content
         except Exception as e:
             raise ConnectionError(f"Google Gemini API error: {str(e)}")
     

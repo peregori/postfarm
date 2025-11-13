@@ -1,5 +1,6 @@
 import httpx
 import re
+import json
 from typing import Optional
 from app.providers.base import BaseAIProvider
 from app.config import settings
@@ -27,17 +28,28 @@ class LlamaCppProvider(BaseAIProvider):
             if platform == "twitter":
                 system_prompt = """You are a social media content creator for Twitter/X. Create concise, engaging tweets under 280 characters. Use appropriate tone for the platform."""
             elif platform == "linkedin":
-                system_prompt = """You are a social media content creator for LinkedIn. Create professional, thought-provoking posts suitable for a business network. Keep content engaging and authentic."""
-            else:
-                # General/default prompt
-                system_prompt = """You are a social media content creator. 
-Create engaging, authentic content for professional platforms like Twitter and LinkedIn.
-Keep responses concise and platform-appropriate."""
+                system_prompt = """You are a LinkedIn ghostwriter creating viral, engaging posts. Write in first person with a confident, upbeat, savvy tone. Use this structure naturally (don't number it or mention steps):
+- Bold hook with metrics/results
+- Free value or key insight
+- Brief origin story or realization
+- Show expertise through experience
+- Surprising or unconventional insight
+- Actionable method or framework
+- Bullet points for metrics/outcomes (use ⇳ for visual emphasis)
+- Positive, energizing conclusion
+- Call-to-action for engagement
+
+CRITICAL: Never include hashtags, emojis, meta-commentary, or checklist confirmations. Output ONLY the post content. Max 250 words."""
         
         # For reasoning models, add explicit instruction to output directly
-        user_content = prompt
-        if max_tokens > 0:
-            user_content = f"{prompt}\n\nIMPORTANT: Provide only the final content output. Do not show your reasoning process."
+        # For LinkedIn, integrate the user prompt as the post topic
+        if platform == "linkedin":
+            user_content = f"Post Topic: {prompt}\n\nCreate a LinkedIn post following the structure provided. Output the post content directly."
+        else:
+            user_content = prompt
+        
+        if max_tokens > 0 and platform != "linkedin":
+            user_content = f"{user_content}\n\nIMPORTANT: Provide only the final content output. Do not show your reasoning process."
         
         messages = [
             {"role": "system", "content": system_prompt},
@@ -115,6 +127,34 @@ Keep responses concise and platform-appropriate."""
                             content = reasoning
                     
                     content = content.strip() if content else ""
+                    
+                    # For LinkedIn, try to extract JSON if present
+                    if platform == "linkedin" and content:
+                        # Try to parse JSON response
+                        try:
+                            # Look for JSON block in the content (handle nested braces)
+                            json_start = content.find('{')
+                            if json_start != -1:
+                                # Find matching closing brace
+                                brace_count = 0
+                                json_end = -1
+                                for i in range(json_start, len(content)):
+                                    if content[i] == '{':
+                                        brace_count += 1
+                                    elif content[i] == '}':
+                                        brace_count -= 1
+                                        if brace_count == 0:
+                                            json_end = i + 1
+                                            break
+                                
+                                if json_end > json_start:
+                                    json_str = content[json_start:json_end]
+                                    parsed = json.loads(json_str)
+                                    if "linkedin_post" in parsed:
+                                        content = parsed["linkedin_post"]
+                        except (json.JSONDecodeError, KeyError, ValueError):
+                            # If JSON parsing fails, use content as-is
+                            pass
                     
                     if not content:
                         raise ValueError(
