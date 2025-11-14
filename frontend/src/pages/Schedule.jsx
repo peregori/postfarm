@@ -339,6 +339,11 @@ export default function Schedule() {
     }
   })
 
+  // Count confirmed drafts that are NOT yet scheduled
+  const toBeScheduledCount = filteredDrafts.filter(draft => 
+    !scheduled.some(s => s.draft_id === draft.id)
+  ).length
+
   return (
     <DndContext onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
       <div className="flex flex-col h-full">
@@ -349,7 +354,7 @@ export default function Schedule() {
             <div className="flex items-center gap-3 shrink-0">
               <h2 className="text-lg font-semibold">Schedule</h2>
               <Badge variant="secondary" className="h-6 px-2 text-xs font-medium">
-                {scheduled.length}
+                {toBeScheduledCount}
               </Badge>
             </div>
 

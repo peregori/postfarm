@@ -84,10 +84,7 @@ export default function Dashboard() {
       <div className="card">
         <h3 className="text-lg font-semibold mb-4">Quick Actions</h3>
         <div className="flex flex-wrap gap-3">
-          <Link to="/generate" className="btn btn-primary">
-            Generate New Content
-          </Link>
-          <Link to="/drafts" className="btn btn-outline">
+          <Link to="/inbox" className="btn btn-outline">
             View All Drafts
           </Link>
           <Link to="/schedule" className="btn btn-outline">
@@ -100,7 +97,7 @@ export default function Dashboard() {
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Recent Drafts</h3>
-          <Link to="/drafts" className="text-sm font-medium text-primary hover:text-primary/80">
+          <Link to="/inbox" className="text-sm font-medium text-primary hover:text-primary/80">
             View all
           </Link>
         </div>
@@ -111,7 +108,7 @@ export default function Dashboard() {
             {recentDrafts.map((draft) => (
               <Link
                 key={draft.id}
-                to={`/drafts/${draft.id}`}
+                to="/inbox"
                 className="block p-4 bg-gray-800 rounded-lg hover:bg-gray-750 transition-colors"
               >
                 <div className="flex items-start justify-between">

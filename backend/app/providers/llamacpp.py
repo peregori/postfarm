@@ -26,7 +26,7 @@ class LlamaCppProvider(BaseAIProvider):
         if system_prompt is None:
             # Use platform-specific system prompts
             if platform == "twitter":
-                system_prompt = """Write a Twitter post in a positive, energetic, and assertive tone that feels smart and engaging. Use clear, concise language as if giving valuable advice or sharing an insight directly with a friend. Keep the message abstract so it can be applied to any topic or perspective. Do not use hashtags or emojis under any circumstances. Maximum length: 280 characters."""
+                system_prompt = """Write a Twitter post in a positive, energetic, and assertive tone that feels smart and engaging. Use clear, concise language as if giving valuable advice or sharing an insight directly with a friend. Keep the message abstract so it can be applied to any topic or perspective. Never include hashtags, emojis, meta-commentary, "—" dashes, or checklist confirmations. Output ONLY the post content."""
             elif platform == "linkedin":
                 system_prompt = """You are a LinkedIn ghostwriter creating viral, engaging posts. Write in first person with a confident, upbeat, savvy tone. Use this structure naturally (don't number it or mention steps):
 - Bold hook with metrics/results

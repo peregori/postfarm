@@ -4,14 +4,25 @@ import {
   Calendar,
   Inbox as InboxIcon,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import ServerStatus from './ServerStatus'
-import { Separator } from '@/components/ui/separator'
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
 import Logo from './Logo'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from '@/components/ui/sidebar'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 const navigation = [
   { name: 'Inbox', href: '/', icon: InboxIcon },
@@ -19,81 +30,126 @@ const navigation = [
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
-export default function Sidebar({ onNavigate }) {
+export default function AppSidebar() {
   const location = useLocation()
   const currentPath = location.pathname
-  const [collapsed, setCollapsed] = useState(false)
+  const { state, toggleSidebar } = useSidebar()
 
   return (
-    <aside
-      className={cn(
-        "flex flex-col h-screen bg-background border-r transition-all duration-300 shadow-lg md:shadow-none",
-        collapsed ? "w-16" : "w-64"
-      )}
-    >
-      {/* Logo/Branding */}
-      <div className="flex items-center justify-between p-4 border-b">
-        {!collapsed && (
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <Logo className="h-5 w-5 text-primary shrink-0" size={20} />
-            <h1 className="text-lg font-semibold truncate">PostFarm</h1>
-          </div>
-        )}
-        {collapsed && (
-          <Logo className="h-5 w-5 text-primary mx-auto" size={20} />
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0 shrink-0 hidden md:flex"
-          onClick={() => setCollapsed(!collapsed)}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="relative group/header">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <div className="flex items-center gap-2">
+              <div 
+                className="relative flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground cursor-pointer shrink-0 group/icon"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  toggleSidebar()
+                }}
+              >
+                <Logo className={cn(
+                  "size-4 transition-opacity",
+                  state === "collapsed" && "group-hover/icon:opacity-0"
+                )} size={16} />
+                {state === "collapsed" && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "absolute inset-0 size-8 rounded-lg opacity-0 group-hover/icon:opacity-100 transition-opacity",
+                      "hover:bg-sidebar-accent"
+                    )}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      toggleSidebar()
+                    }}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                    <span className="sr-only">Toggle Sidebar</span>
+                  </Button>
+                )}
+              </div>
+              <SidebarMenuButton 
+                size="lg" 
+                asChild
+                className="flex-1 pr-8"
+              >
+                <Link to="/">
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-semibold">PostFarm</span>
+                    <span className="truncate text-xs text-sidebar-foreground/70">Social Media Manager</span>
+                  </div>
+                </Link>
+              </SidebarMenuButton>
+            </div>
+          </SidebarMenuItem>
+        </SidebarMenu>
+        {state === "expanded" && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-6 w-6 opacity-0 group-hover/header:opacity-100 transition-opacity shrink-0 absolute top-1/2 right-2 -translate-y-1/2",
+              "hover:bg-sidebar-accent z-10 pointer-events-none group-hover/header:pointer-events-auto"
+            )}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              toggleSidebar()
+            }}
+          >
             <ChevronLeft className="h-4 w-4" />
-          )}
-        </Button>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-1">
-        {navigation.map((item) => {
-          const Icon = item.icon
-          const isActive = currentPath === item.href
-          return (
-            <Link
-              key={item.href}
-              to={item.href}
-              onClick={() => onNavigate && onNavigate()}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-              )}
-            >
-              <Icon className="h-5 w-5 shrink-0" />
-              {!collapsed && <span>{item.name}</span>}
-            </Link>
-          )
-        })}
-      </nav>
-
-      <Separator />
-
-      {/* AI Status Section */}
-      <div className="p-3">
-        {!collapsed ? (
-          <ServerStatus />
-        ) : (
-          <div className="flex justify-center">
-            <ServerStatus />
-          </div>
+            <span className="sr-only">Toggle Sidebar</span>
+          </Button>
         )}
-      </div>
-    </aside>
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup className="px-1.5 pt-4">
+          <SidebarGroupLabel className="px-3 mb-2">Navigation</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu className="space-y-1">
+              {navigation.map((item) => {
+                const Icon = item.icon
+                const isActive = currentPath === item.href
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton 
+                      asChild 
+                      tooltip={item.name} 
+                      isActive={isActive} 
+                      className="px-3 [&>svg]:shrink-0 [&>span]:truncate"
+                    >
+                      <Link to={item.href} className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 shrink-0" />
+                        <span>{item.name}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            {state === "expanded" ? (
+              <ServerStatus />
+            ) : (
+              <SidebarMenuButton size="lg" tooltip="AI Status">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-accent">
+                  <span className="text-xs">AI</span>
+                </div>
+              </SidebarMenuButton>
+            )}
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
   )
 }
 
