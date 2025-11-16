@@ -5,6 +5,7 @@ import {
   Inbox as InboxIcon,
   ChevronLeft,
   ChevronRight,
+  PanelLeft,
 } from 'lucide-react'
 import ServerStatus from './ServerStatus'
 import Logo from './Logo'
@@ -36,7 +37,7 @@ export default function AppSidebar() {
   const { state, toggleSidebar } = useSidebar()
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" className="relative group/sidebar">
       <SidebarHeader className="relative group/header">
         <SidebarMenu>
           <SidebarMenuItem>
@@ -49,27 +50,16 @@ export default function AppSidebar() {
                   toggleSidebar()
                 }}
               >
+                {/* Logo - visible by default when collapsed, hidden on hover */}
                 <Logo className={cn(
                   "size-4 transition-opacity",
                   state === "collapsed" && "group-hover/icon:opacity-0"
                 )} size={16} />
+                {/* Sidebar icon - hidden by default when collapsed, visible on hover */}
                 {state === "collapsed" && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={cn(
-                      "absolute inset-0 size-8 rounded-lg opacity-0 group-hover/icon:opacity-100 transition-opacity",
-                      "hover:bg-sidebar-accent"
-                    )}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      toggleSidebar()
-                    }}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                    <span className="sr-only">Toggle Sidebar</span>
-                  </Button>
+                  <PanelLeft className={cn(
+                    "h-4 w-4 absolute inset-0 m-auto opacity-0 group-hover/icon:opacity-100 transition-opacity text-sidebar-primary-foreground"
+                  )} />
                 )}
               </div>
               <SidebarMenuButton 
@@ -84,27 +74,28 @@ export default function AppSidebar() {
                   </div>
                 </Link>
               </SidebarMenuButton>
+              {/* Right edge indicator when expanded - inside sidebar, always visible */}
+              {state === "expanded" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-8 w-8 shrink-0",
+                    "hover:bg-sidebar-accent"
+                  )}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    toggleSidebar()
+                  }}
+                >
+                  <PanelLeft className="h-4 w-4" />
+                  <span className="sr-only">Close Sidebar</span>
+                </Button>
+              )}
             </div>
           </SidebarMenuItem>
         </SidebarMenu>
-        {state === "expanded" && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-6 w-6 opacity-0 group-hover/header:opacity-100 transition-opacity shrink-0 absolute top-1/2 right-2 -translate-y-1/2",
-              "hover:bg-sidebar-accent z-10 pointer-events-none group-hover/header:pointer-events-auto"
-            )}
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              toggleSidebar()
-            }}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            <span className="sr-only">Toggle Sidebar</span>
-          </Button>
-        )}
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup className="px-1.5 pt-4">
