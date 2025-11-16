@@ -188,10 +188,10 @@ export default function Drafts() {
                     key={draft.id}
                     onClick={() => setSelectedDraft({ ...draft })}
                     className={cn(
-                      "p-4 rounded-lg cursor-pointer transition-colors border",
+                      "p-4 rounded-lg cursor-pointer transition-colors border-border/80",
                       selectedDraft?.id === draft.id
-                        ? 'bg-accent border-accent-foreground/20'
-                        : 'bg-background hover:bg-accent/50'
+                        ? 'bg-accent border-accent-foreground/50'
+                        : 'bg-background hover:bg-accent/50 hover:border-border'
                     )}
                   >
                     <h3 className="text-sm font-semibold mb-1 truncate">

@@ -333,7 +333,7 @@ export default function Inbox() {
             {/* Sort Filter */}
             <div className="mb-4">
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-full h-8 text-xs border-muted/50 bg-muted/20 hover:bg-muted/40 focus:bg-background focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-muted/50 transition-all duration-200">
+                <SelectTrigger className="w-full h-8 text-xs border-muted/50 bg-background hover:bg-muted/20 focus:bg-background focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-muted/50 transition-all duration-200">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -388,8 +388,8 @@ export default function Inbox() {
                       key={draft.id}
                       onClick={() => setSelectedDraft(draft)}
                       className={cn(
-                        "group cursor-pointer transition-all border-border/50 hover:border-border hover:shadow-sm",
-                        isActive && "border-primary/50 shadow-sm bg-accent/50"
+                        "group cursor-pointer transition-all border-border/80 hover:border-border hover:shadow-sm",
+                        isActive && "border-primary/80 shadow-sm bg-accent/50"
                       )}
                     >
                       <CardContent className="p-3">

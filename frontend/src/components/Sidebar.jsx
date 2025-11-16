@@ -43,7 +43,10 @@ export default function AppSidebar() {
           <SidebarMenuItem>
             <div className="flex items-center gap-3 w-full h-full">
               <div 
-                className="relative flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground cursor-pointer shrink-0 group/icon ml-2"
+                className={cn(
+                  "relative flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground cursor-pointer shrink-0 group/icon",
+                  state === "expanded" ? "ml-2" : ""
+                )}
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -92,7 +95,7 @@ export default function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup className="px-1.5 pt-4">
-          <SidebarGroupLabel className="px-3 mb-2">Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel className="px-3 mb-2 text-sidebar-foreground font-semibold">Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-1">
               {navigation.map((item) => {

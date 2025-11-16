@@ -667,9 +667,9 @@ function DraggableDraft({ draft, onClick, isSelected }) {
       {...attributes}
       onClick={onClick}
       className={cn(
-        "cursor-grab active:cursor-grabbing transition-all border-border/50 hover:border-border hover:shadow-sm",
+        "cursor-grab active:cursor-grabbing transition-all border-border/80 hover:border-border hover:shadow-sm",
         isDragging && "opacity-50",
-        isSelected && "border-primary/50 shadow-sm bg-accent/50"
+        isSelected && "border-primary/80 shadow-sm bg-accent/50"
       )}
     >
       <CardContent className="p-3">
