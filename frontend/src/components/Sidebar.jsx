@@ -38,12 +38,12 @@ export default function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" className="relative group/sidebar">
-      <SidebarHeader className="relative group/header">
-        <SidebarMenu>
+      <SidebarHeader className="relative group/header h-16 flex items-start p-0 px-2 pt-4">
+        <SidebarMenu className="w-full">
           <SidebarMenuItem>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 w-full h-full">
               <div 
-                className="relative flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground cursor-pointer shrink-0 group/icon"
+                className="relative flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground cursor-pointer shrink-0 group/icon ml-2"
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -62,18 +62,11 @@ export default function AppSidebar() {
                   )} />
                 )}
               </div>
-              <SidebarMenuButton 
-                size="lg" 
-                asChild
-                className="flex-1 pr-8"
-              >
-                <Link to="/">
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">PostFarm</span>
-                    <span className="truncate text-xs text-sidebar-foreground/70">Social Media Manager</span>
-                  </div>
-                </Link>
-              </SidebarMenuButton>
+              {state === "expanded" && (
+                <h2 className="text-lg font-semibold truncate flex-1 leading-none">
+                  PostFarm
+                </h2>
+              )}
               {/* Right edge indicator when expanded - inside sidebar, always visible */}
               {state === "expanded" && (
                 <Button
