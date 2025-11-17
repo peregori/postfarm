@@ -11,6 +11,7 @@ import { showToast } from '@/lib/toast'
 import CalendarView from '@/components/Calendar'
 import { DndContext, useDraggable, useDroppable, DragOverlay, closestCenter } from '@dnd-kit/core'
 import { getPreviewText } from '@/lib/contentCleaner'
+import * as simpleIcons from 'simple-icons'
 import {
   Dialog,
   DialogContent,
@@ -27,6 +28,16 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { format } from 'date-fns'
+
+// Helper function to extract platform from tags
+const getPlatformFromTags = (tags) => {
+  if (!tags || !Array.isArray(tags)) return null
+  const platformTag = tags.find(tag => tag.startsWith('platform:'))
+  if (platformTag) {
+    return platformTag.replace('platform:', '')
+  }
+  return null
+}
 
 export default function Schedule() {
   const [searchParams] = useSearchParams()
@@ -148,6 +159,11 @@ export default function Schedule() {
 
   const handleSelectDraft = (draft) => {
     setSelectedDraft(draft)
+    // Pre-fill platform if draft has one in tags
+    const draftPlatform = getPlatformFromTags(draft.tags)
+    if (draftPlatform) {
+      setPlatform(draftPlatform)
+    }
     // Pre-fill date/time with today and default time if not set
     if (!scheduledDate) {
       setScheduledDate(new Date().toISOString().split('T')[0])
@@ -470,33 +486,48 @@ export default function Schedule() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Platform Selection */}
+            {/* Platform Selection - Same UI as DraftEditor */}
             <div>
               <label className="block text-sm font-medium mb-2">Platform</label>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setPlatform('twitter')}
-                  className={cn(
-                    "flex-1 flex items-center justify-center p-4 rounded-lg border transition-colors",
-                    platform === 'twitter'
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-input hover:bg-accent'
-                  )}
-                >
-                  <Twitter className="mr-2 h-5 w-5" />
-                  Twitter / X
-                </button>
+              <div className="flex items-center gap-0 bg-background/95 backdrop-blur-sm border rounded-full px-1.5 py-0.5 shadow-sm w-fit">
                 <button
                   onClick={() => setPlatform('linkedin')}
                   className={cn(
-                    "flex-1 flex items-center justify-center p-4 rounded-lg border transition-colors",
-                    platform === 'linkedin'
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-input hover:bg-accent'
+                    "h-5 w-5 flex items-center justify-center rounded-full transition-all",
+                    "hover:bg-muted/50"
                   )}
+                  title="LinkedIn"
                 >
-                  <Linkedin className="mr-2 h-5 w-5" />
-                  LinkedIn
+                  <svg
+                    role="img"
+                    viewBox="0 0 24 24"
+                    className="h-3 w-3"
+                    fill="currentColor"
+                    style={{ color: platform === 'linkedin' ? '#0A66C2' : 'hsl(var(--muted-foreground))' }}
+                    preserveAspectRatio="xMidYMid meet"
+                  >
+                    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                  </svg>
+                </button>
+                <div className="h-3 w-px bg-border" />
+                <button
+                  onClick={() => setPlatform('twitter')}
+                  className={cn(
+                    "h-5 w-5 flex items-center justify-center rounded-full transition-all",
+                    "hover:bg-muted/50"
+                  )}
+                  title="Twitter/X"
+                >
+                  <svg
+                    role="img"
+                    viewBox="0 0 24 24"
+                    className="h-2.5 w-2.5"
+                    fill="currentColor"
+                    style={{ color: platform === 'twitter' ? '#000000' : 'hsl(var(--muted-foreground))' }}
+                    preserveAspectRatio="xMidYMid meet"
+                  >
+                    <path d={simpleIcons.siX.path} />
+                  </svg>
                 </button>
               </div>
             </div>
@@ -635,6 +666,7 @@ function DraggableDraft({ draft, onClick, isSelected }) {
 
   const preview = getPreviewText(draft.content || '')
   const hasPrompt = draft.prompt && draft.prompt.trim().length > 0
+  const draftPlatform = getPlatformFromTags(draft.tags)
   
   // Format timestamp
   const formatDate = (dateString) => {
@@ -679,6 +711,33 @@ function DraggableDraft({ draft, onClick, isSelected }) {
               <Badge variant="secondary" className="h-3.5 px-1 text-[8px] gap-0.5 opacity-60">
                 <Sparkles className="h-2 w-2" />
               </Badge>
+            )}
+            {draftPlatform && (
+              <div className="flex items-center">
+                {draftPlatform === 'twitter' ? (
+                  <svg
+                    role="img"
+                    viewBox="0 0 24 24"
+                    className="h-2.5 w-2.5 shrink-0"
+                    fill="currentColor"
+                    style={{ color: '#000000' }}
+                    preserveAspectRatio="xMidYMid meet"
+                  >
+                    <path d={simpleIcons.siX.path} />
+                  </svg>
+                ) : draftPlatform === 'linkedin' ? (
+                  <svg
+                    role="img"
+                    viewBox="0 0 24 24"
+                    className="h-3 w-3 shrink-0"
+                    fill="currentColor"
+                    style={{ color: '#0A66C2' }}
+                    preserveAspectRatio="xMidYMid meet"
+                  >
+                    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                  </svg>
+                ) : null}
+              </div>
             )}
           </div>
           <span className="text-[9px] text-muted-foreground font-medium">

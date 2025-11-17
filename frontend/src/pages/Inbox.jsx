@@ -35,6 +35,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { getPreviewText } from '@/lib/contentCleaner'
+import * as simpleIcons from 'simple-icons'
+
+// Helper function to extract platform from tags
+const getPlatformFromTags = (tags) => {
+  if (!tags || !Array.isArray(tags)) return null
+  const platformTag = tags.find(tag => tag.startsWith('platform:'))
+  if (platformTag) {
+    return platformTag.replace('platform:', '')
+  }
+  return null
+}
 
 export default function Inbox() {
   const [drafts, setDrafts] = useState([])
@@ -183,7 +194,7 @@ export default function Inbox() {
     setShowDeleteDialog(true)
   }
 
-  const handleConfirm = async ({ content }) => {
+  const handleConfirm = async ({ content, platform }) => {
     if (!selectedDraft?.id) {
       showToast.warning('Draft Required', 'Please save the draft first.')
       return
@@ -194,8 +205,14 @@ export default function Inbox() {
       const currentTags = selectedDraft.tags || []
       const hasConfirmedTag = currentTags.includes('confirmed')
       
+      // Remove any existing platform tags and add the new one
+      const updatedTags = currentTags.filter(tag => !tag.startsWith('platform:'))
+      if (platform) {
+        updatedTags.push(`platform:${platform}`)
+      }
+      
       if (!hasConfirmedTag) {
-        const updatedTags = [...currentTags, 'confirmed']
+        updatedTags.push('confirmed')
         const updated = await draftsApi.update(selectedDraft.id, { 
           content,
           tags: updatedTags 
@@ -206,8 +223,8 @@ export default function Inbox() {
         setSelectedDraft(null)
         showToast.success('Confirmed', 'Ready for scheduling')
       } else {
-        // Just update content if already confirmed
-        const updated = await draftsApi.update(selectedDraft.id, { content })
+        // Just update content and tags if already confirmed
+        const updated = await draftsApi.update(selectedDraft.id, { content, tags: updatedTags })
         setDrafts(drafts.filter(d => d.id !== updated.id))
         setSelectedDraft(null)
       }
@@ -382,6 +399,7 @@ export default function Inbox() {
                   const preview = getPreviewText(draft.content || '')
                   const timeAgo = formatDate(draft.created_at)
                   const hasPrompt = draft.prompt && draft.prompt.trim().length > 0
+                  const draftPlatform = getPlatformFromTags(draft.tags)
                   
                   return (
                     <Card
@@ -400,6 +418,33 @@ export default function Inbox() {
                               <Badge variant="secondary" className="h-3.5 px-1 text-[8px] gap-0.5 opacity-60">
                                 <Sparkles className="h-2 w-2" />
                               </Badge>
+                            )}
+                            {draftPlatform && (
+                              <div className="flex items-center">
+                                {draftPlatform === 'twitter' ? (
+                                  <svg
+                                    role="img"
+                                    viewBox="0 0 24 24"
+                                    className="h-2.5 w-2.5 shrink-0"
+                                    fill="currentColor"
+                                    style={{ color: '#000000' }}
+                                    preserveAspectRatio="xMidYMid meet"
+                                  >
+                                    <path d={simpleIcons.siX.path} />
+                                  </svg>
+                                ) : draftPlatform === 'linkedin' ? (
+                                  <svg
+                                    role="img"
+                                    viewBox="0 0 24 24"
+                                    className="h-3 w-3 shrink-0"
+                                    fill="currentColor"
+                                    style={{ color: '#0A66C2' }}
+                                    preserveAspectRatio="xMidYMid meet"
+                                  >
+                                    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                                  </svg>
+                                ) : null}
+                              </div>
                             )}
                           </div>
                           <span className="text-[9px] text-muted-foreground font-medium">

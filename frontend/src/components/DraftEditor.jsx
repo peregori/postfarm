@@ -776,7 +776,9 @@ export default function DraftEditor({
 
   const handleConfirm = () => {
     if (onConfirm) {
-      onConfirm({ content })
+      // Determine final platform: detected > manual > lastUsed
+      const finalPlatform = getFinalPlatform(detectedPlatform, manualPlatform) || lastUsedPlatform || manualPlatform
+      onConfirm({ content, platform: finalPlatform })
     }
   }
 
