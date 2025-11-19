@@ -5,22 +5,25 @@ import Settings from './pages/Settings'
 import Inbox from './pages/Inbox'
 import { Toaster } from './components/ui/toaster'
 import { HealthProvider } from './contexts/HealthContext'
+import { HotkeysProvider } from './contexts/HotkeysContext'
 
 function App() {
   return (
-    <HealthProvider>
-      <Router>
-        <Layout>
-          <Routes>
-            <Route path="/" element={<Inbox />} />
-            <Route path="/inbox" element={<Inbox />} />
-            <Route path="/schedule" element={<Schedule />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
-          <Toaster />
-        </Layout>
-      </Router>
-    </HealthProvider>
+    <HotkeysProvider>
+      <HealthProvider>
+        <Router>
+          <Layout>
+            <Routes>
+              <Route path="/" element={<Inbox />} />
+              <Route path="/inbox" element={<Inbox />} />
+              <Route path="/schedule" element={<Schedule />} />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+            <Toaster />
+          </Layout>
+        </Router>
+      </HealthProvider>
+    </HotkeysProvider>
   )
 }
 
