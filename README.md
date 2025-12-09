@@ -1,4 +1,4 @@
-# PostFarm - Local Content Management & Scheduling
+# PostFarm
 
 A full-stack local application for generating, editing, and scheduling social media content using local GGUF LLMs with llama.cpp. Inspired by LangChain's AgentInbox, PostFarm provides a modern interface for content creation and management.
 
