@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Calendar, Clock, Send, Twitter, Linkedin, CheckCircle, X, Trash2, Search, Plus, Sparkles } from 'lucide-react'
-import { schedulerApi, platformsApi } from '../api/client'
+import { schedulerApi, platformsApi, draftsApi } from '../api/client'
 import useDraftStore from '../stores/draftStore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -48,6 +48,8 @@ export default function Schedule() {
 
   // Use Zustand store for drafts
   const drafts = useDraftStore((state) => state.drafts)
+  const scheduleDraft = useDraftStore((state) => state.scheduleDraft)
+  const unscheduleDraft = useDraftStore((state) => state.unscheduleDraft)
   const [selectedDraft, setSelectedDraft] = useState(null)
   const [scheduled, setScheduled] = useState([])
   const [platform, setPlatform] = useState('twitter')
@@ -57,26 +59,45 @@ export default function Schedule() {
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState('newest') // 'newest', 'oldest', 'alphabetical'
+  const [error, setError] = useState(null)
 
   useEffect(() => {
-    loadScheduled()
+    let mounted = true
     
-    // Handle URL parameters for direct scheduling
-    if (draftId || contentParam) {
-      if (draftId) {
-        // Find draft in store by ID
-        const draft = drafts.find(d => d.id === draftId || String(d.id) === String(draftId))
-        if (draft) {
-          setSelectedDraft(draft)
+    const init = async () => {
+      try {
+        await loadScheduled()
+        
+        // Handle URL parameters for direct scheduling
+        if (draftId || contentParam) {
+          if (draftId) {
+            // Find draft in store by ID
+            const draft = drafts.find(d => d.id === draftId || String(d.id) === String(draftId))
+            if (draft && mounted) {
+              setSelectedDraft(draft)
+              setShowScheduleDialog(true)
+            }
+          } else if (contentParam && mounted) {
+            setSelectedDraft({
+              id: null,
+              title: titleParam || '',
+              content: decodeURIComponent(contentParam),
+            })
+            setShowScheduleDialog(true)
+          }
         }
-      } else if (contentParam) {
-        setSelectedDraft({
-          id: null,
-          title: titleParam || '',
-          content: decodeURIComponent(contentParam),
-        })
+      } catch (err) {
+        console.error('Initialization error:', err)
+        if (mounted) {
+          setError('Failed to load scheduler. Please refresh the page.')
+        }
       }
-      setShowScheduleDialog(true)
+    }
+    
+    init()
+    
+    return () => {
+      mounted = false
     }
   }, [draftId, contentParam, titleParam, drafts])
 
@@ -87,6 +108,7 @@ export default function Schedule() {
       setScheduled(scheduledPosts)
     } catch (error) {
       console.error('Failed to load scheduled:', error)
+      // Don't throw - just log the error to prevent blank page
     }
   }
 
@@ -97,28 +119,180 @@ export default function Schedule() {
     }
 
     const scheduledDateTime = `${scheduledDate}T${scheduledTime}:00`
+    
+    // Validate that scheduled time is in the future
+    const scheduledDateObj = new Date(scheduledDateTime)
+    const now = new Date()
+    
+    if (isNaN(scheduledDateObj.getTime())) {
+      showToast.error('Invalid Date', 'Please select a valid date and time.')
+      return
+    }
+    
+    if (scheduledDateObj <= now) {
+      showToast.error('Invalid Time', 'Scheduled time must be in the future.')
+      return
+    }
 
     setLoading(true)
     try {
-      await schedulerApi.schedule({
-        draft_id: selectedDraft?.id || null,
+      // Determine the draft_id to send to API
+      // If selectedDraft has draft_id, it's a post object - use that
+      // Otherwise, use selectedDraft.id (which should be the draft's ID)
+      let draftIdForApi = selectedDraft.draft_id || selectedDraft.id
+      let draftUuidForStore = selectedDraft.id
+      
+      // If we got a post object, try to find the actual draft for store updates
+      if (selectedDraft.draft_id && !drafts.find(d => d.id === selectedDraft.draft_id)) {
+        // Post object with draft_id - find the actual draft
+        const actualDraft = drafts.find(d => {
+          return String(d.id) === String(selectedDraft.draft_id) || d.id === selectedDraft.draft_id
+        })
+        if (actualDraft) {
+          draftUuidForStore = actualDraft.id
+        }
+      }
+
+      // Validate we have what we need
+      if (!draftIdForApi) {
+        showToast.error('Schedule Failed', 'Cannot schedule: draft ID is missing.')
+        setLoading(false)
+        return
+      }
+
+      // If this is rescheduling an existing post, cancel the old one first
+      const existingPost = scheduled.find(s => 
+        (s.draft_id && s.draft_id === draftIdForApi) || 
+        (s.id && selectedDraft.id && s.id === selectedDraft.id)
+      )
+      
+      if (existingPost && existingPost.id) {
+        try {
+          await schedulerApi.cancel(existingPost.id)
+          if (existingPost.draft_id) {
+            unscheduleDraft(existingPost.draft_id)
+          }
+        } catch (cancelError) {
+          console.warn('Failed to cancel existing post:', cancelError)
+          // Continue anyway - might already be cancelled
+        }
+      }
+
+      // Backend expects integer draft_id
+      // Frontend drafts use UUIDs (localStorage only)
+      // If we have a UUID, we need to create the draft in backend first
+      let finalDraftId = draftIdForApi
+      
+      // Check if it's a UUID (contains dashes) - this means it's a frontend-only draft
+      if (typeof draftIdForApi === 'string' && draftIdForApi.includes('-')) {
+        // This is a UUID from frontend store - backend doesn't know about it
+        // Create the draft in backend first, then use the returned ID
+        try {
+          const createdDraft = await draftsApi.create({
+            title: selectedDraft.title || null,
+            content: selectedDraft.content,
+            tags: selectedDraft.tags || [],
+          })
+          finalDraftId = createdDraft.id // Backend returns integer ID
+          console.log('Created draft in backend:', finalDraftId)
+        } catch (createError) {
+          console.error('Failed to create draft in backend:', createError)
+          throw new Error('Failed to save draft to backend. Please try again.')
+        }
+      } else {
+        // Try to convert to integer if it's a string number
+        if (typeof draftIdForApi === 'string' && !isNaN(parseInt(draftIdForApi, 10))) {
+          finalDraftId = parseInt(draftIdForApi, 10)
+        } else if (typeof draftIdForApi !== 'number') {
+          console.warn('Unexpected draft_id format:', draftIdForApi)
+        }
+      }
+      
+      // Validate we have a valid integer ID
+      if (!finalDraftId || (typeof finalDraftId !== 'number' && isNaN(parseInt(finalDraftId, 10)))) {
+        throw new Error('Invalid draft ID. Please try selecting the draft again.')
+      }
+
+      const response = await schedulerApi.schedule({
+        draft_id: finalDraftId,
         platform,
-        content: selectedDraft.content,
+        content: selectedDraft.content || '',
         scheduled_time: scheduledDateTime,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       })
       
+      // Update local draft state if we have a UUID (only if it's a valid UUID format)
+      if (draftUuidForStore && typeof draftUuidForStore === 'string' && draftUuidForStore.includes('-')) {
+        try {
+          scheduleDraft(draftUuidForStore, scheduledDateTime)
+        } catch (storeError) {
+          console.warn('Failed to update draft store:', storeError)
+          // Continue - not critical
+        }
+      }
+      
       showToast.success('Post Scheduled', 'Post scheduled successfully!')
-      setShowScheduleDialog(false)
-      setSelectedDraft(null)
-      setScheduledDate('')
-      setScheduledTime('')
-      loadScheduled()
+      
+      // Reset state safely
+      try {
+        setShowScheduleDialog(false)
+        setSelectedDraft(null)
+        setScheduledDate('')
+        setScheduledTime('')
+      } catch (stateError) {
+        console.error('Error resetting state:', stateError)
+      }
+      
+      // Reload scheduled posts
+      try {
+        await loadScheduled()
+      } catch (loadError) {
+        console.error('Failed to reload scheduled posts:', loadError)
+        // Don't show error to user - they already got success message
+      }
     } catch (error) {
-      console.error('Failed to schedule post:', error)
-      showToast.error('Schedule Failed', error.response?.data?.detail || 'Failed to schedule post.')
+      console.error('Failed to schedule post - Full error:', error)
+      console.error('Error stack:', error?.stack)
+      console.error('Error details:', {
+        message: error?.message,
+        response: error?.response,
+        data: error?.response?.data
+      })
+      
+      let errorMessage = 'Failed to schedule post.'
+      
+      try {
+        if (error?.response?.data) {
+          // API error response
+          errorMessage = error.response.data.detail || error.response.data.message || errorMessage
+        } else if (error?.response?.status) {
+          errorMessage = `Server error (${error.response.status}). Please try again.`
+        } else if (error?.message) {
+          // Network or other error
+          errorMessage = error.message
+        }
+      } catch (parseError) {
+        console.error('Error parsing error message:', parseError)
+        errorMessage = 'An unexpected error occurred. Please check the console and try again.'
+      }
+      
+      // Show error toast
+      try {
+        showToast.error('Schedule Failed', errorMessage)
+      } catch (toastError) {
+        console.error('Failed to show error toast:', toastError)
+        // Fallback: alert if toast fails
+        alert(`Schedule Failed: ${errorMessage}`)
+      }
+      
+      // Don't close dialog on error - let user fix and try again
+      // Keep dialog open so user can correct and retry
     } finally {
-      setLoading(false)
+      try {
+        setLoading(false)
+      } catch (stateError) {
+        console.error('Error setting loading state:', stateError)
+      }
     }
   }
 
@@ -167,6 +341,12 @@ export default function Schedule() {
     setLoading(true)
     try {
       await schedulerApi.cancel(post.id)
+      
+      // Update local draft state
+      if (post.draft_id) {
+        unscheduleDraft(post.draft_id)
+      }
+      
       showToast.success('Post Cancelled', 'Scheduled post has been cancelled.')
       loadScheduled()
       setShowScheduleDialog(false)
@@ -189,13 +369,16 @@ export default function Schedule() {
       // Auto-schedule immediately
       setLoading(true)
       try {
-        await schedulerApi.schedule({
+        const response = await schedulerApi.schedule({
           draft_id: draft.id,
           platform: 'twitter', // default
           content: draft.content,
           scheduled_time: scheduledDateTime,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         })
+        
+        // Update local draft state
+        scheduleDraft(draft.id, scheduledDateTime)
         
         showToast.success('Post Scheduled', 'Post scheduled successfully!')
         loadScheduled()
@@ -344,6 +527,18 @@ export default function Schedule() {
     !scheduled.some(s => s.draft_id === draft.id)
   ).length
 
+  // Show error state if initialization failed
+  if (error) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center">
+          <p className="text-destructive mb-4">{error}</p>
+          <Button onClick={() => window.location.reload()}>Refresh Page</Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <DndContext onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
       <div className="flex flex-col h-full overflow-hidden">
@@ -433,6 +628,7 @@ export default function Schedule() {
             <div className="flex-1 overflow-hidden min-h-0 p-6">
               <CalendarView
                 scheduledPosts={scheduled.map(s => ({ ...s, type: 'scheduled' }))}
+                drafts={drafts}
                 onDateClick={(date) => {
                   // Auto-fill date when clicking calendar
                   if (selectedDraft && !scheduledDate) {
@@ -441,8 +637,19 @@ export default function Schedule() {
                   }
                 }}
                 onPostClick={(post) => {
-                  // Show post details - allow cancel
-                  setSelectedDraft(post)
+                  // Show post details - allow cancel/reschedule
+                  // If post has draft_id, try to find the actual draft from store
+                  let draftToSelect = post
+                  if (post.draft_id) {
+                    const actualDraft = drafts.find(d => {
+                      // Match by draft_id if available, or by id
+                      return d.id === post.draft_id || String(d.id) === String(post.draft_id)
+                    })
+                    if (actualDraft) {
+                      draftToSelect = actualDraft
+                    }
+                  }
+                  setSelectedDraft(draftToSelect)
                   // Pre-fill date/time from scheduled post
                   if (post.scheduled_time) {
                     const scheduledDate = new Date(post.scheduled_time)
@@ -539,7 +746,20 @@ export default function Schedule() {
                   <Input
                     type="date"
                     value={scheduledDate}
-                    onChange={(e) => setScheduledDate(e.target.value)}
+                    onChange={(e) => {
+                      const selectedDate = e.target.value
+                      setScheduledDate(selectedDate)
+                      // If selected date is today, validate time is in future
+                      if (selectedDate === today) {
+                        const now = new Date()
+                        const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+                        if (scheduledTime && scheduledTime <= currentTime) {
+                          // Suggest a time 1 hour from now
+                          const futureTime = new Date(now.getTime() + 60 * 60 * 1000)
+                          setScheduledTime(`${String(futureTime.getHours()).padStart(2, '0')}:${String(futureTime.getMinutes()).padStart(2, '0')}`)
+                        }
+                      }
+                    }}
                     min={today}
                     required
                   />

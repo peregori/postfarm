@@ -6,24 +6,27 @@ import Inbox from './pages/Inbox'
 import { Toaster } from './components/ui/toaster'
 import { HealthProvider } from './contexts/HealthContext'
 import { HotkeysProvider } from './contexts/HotkeysContext'
+import ErrorBoundary from './components/ErrorBoundary'
 
 function App() {
   return (
-    <HotkeysProvider>
-      <HealthProvider>
-        <Router>
-          <Layout>
-            <Routes>
-              <Route path="/" element={<Inbox />} />
-              <Route path="/inbox" element={<Inbox />} />
-              <Route path="/schedule" element={<Schedule />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
-            <Toaster />
-          </Layout>
-        </Router>
-      </HealthProvider>
-    </HotkeysProvider>
+    <ErrorBoundary>
+      <HotkeysProvider>
+        <HealthProvider>
+          <Router>
+            <Layout>
+              <Routes>
+                <Route path="/" element={<Inbox />} />
+                <Route path="/inbox" element={<Inbox />} />
+                <Route path="/schedule" element={<ErrorBoundary><Schedule /></ErrorBoundary>} />
+                <Route path="/settings" element={<Settings />} />
+              </Routes>
+              <Toaster />
+            </Layout>
+          </Router>
+        </HealthProvider>
+      </HotkeysProvider>
+    </ErrorBoundary>
   )
 }
 

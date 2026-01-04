@@ -15,7 +15,7 @@ import {
   setHours,
   setMinutes,
 } from 'date-fns'
-import { ChevronLeft, ChevronRight, Twitter, Linkedin, Calendar as CalendarIcon, Grid3x3, LayoutGrid } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Twitter, Linkedin, Calendar as CalendarIcon, Grid3x3, LayoutGrid, List } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -86,7 +86,8 @@ function useDynamicPostVisibility(dayPosts, cellRef, options = {}) {
 const VIEWS = {
   MONTH: 'month',
   WEEK: 'week',
-  DAY: 'day'
+  DAY: 'day',
+  LIST: 'list'
 }
 
 export default function Calendar({ 
@@ -94,7 +95,8 @@ export default function Calendar({
   onDateClick, 
   onPostClick, 
   onDraftDrop,
-  defaultTimeRange = { start: 8, end: 20 }
+  defaultTimeRange = { start: 8, end: 20 },
+  drafts = [] // Optional: pass drafts to show draft names in List view
 }) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState(VIEWS.MONTH)
@@ -134,14 +136,24 @@ export default function Calendar({
     })
   }
 
+  // Sort scheduled posts chronologically for List View
+  const sortedPosts = useMemo(() => {
+    return [...scheduledPosts].sort((a, b) => {
+      const dateA = new Date(a.scheduled_time)
+      const dateB = new Date(b.scheduled_time)
+      return dateA - dateB
+    })
+  }, [scheduledPosts])
+
   const handlePrevious = () => {
     if (view === VIEWS.MONTH) {
       setCurrentDate(subMonths(currentDate, 1))
     } else if (view === VIEWS.WEEK) {
       setCurrentDate(addDays(currentDate, -7))
-    } else {
+    } else if (view === VIEWS.DAY) {
       setCurrentDate(addDays(currentDate, -1))
     }
+    // List view doesn't need navigation
   }
 
   const handleNext = () => {
@@ -149,9 +161,10 @@ export default function Calendar({
       setCurrentDate(addMonths(currentDate, 1))
     } else if (view === VIEWS.WEEK) {
       setCurrentDate(addDays(currentDate, 7))
-    } else {
+    } else if (view === VIEWS.DAY) {
       setCurrentDate(addDays(currentDate, 1))
     }
+    // List view doesn't need navigation
   }
 
   const handleToday = () => {
@@ -370,16 +383,23 @@ export default function Calendar({
             {view === VIEWS.MONTH && format(currentDate, 'MMMM yyyy')}
             {view === VIEWS.WEEK && weekDays && weekDays.length >= 7 && `${format(weekDays[0], 'MMM d')} - ${format(weekDays[6], 'MMM d, yyyy')}`}
             {view === VIEWS.DAY && format(currentDate, 'MMMM d, yyyy')}
+            {view === VIEWS.LIST && 'Scheduled Posts'}
           </h3>
-          <Button variant="outline" size="sm" onClick={handleToday} className="text-xs sm:text-sm">
-            Today
-          </Button>
+          {view !== VIEWS.LIST && (
+            <Button variant="outline" size="sm" onClick={handleToday} className="text-xs sm:text-sm">
+              Today
+            </Button>
+          )}
         </div>
         
         <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
           {/* View Toggle */}
           <Tabs value={view} onValueChange={setView}>
             <TabsList className="h-8 sm:h-9">
+              <TabsTrigger value={VIEWS.LIST} className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3">
+                <List className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+                <span className="hidden sm:inline">List</span>
+              </TabsTrigger>
               <TabsTrigger value={VIEWS.MONTH} className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3">
                 <Grid3x3 className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
                 <span className="hidden sm:inline">Month</span>
@@ -395,14 +415,16 @@ export default function Calendar({
             </TabsList>
           </Tabs>
 
-          <div className="flex gap-1 sm:gap-2">
-            <Button variant="outline" size="icon" onClick={handlePrevious} className="h-8 w-8 sm:h-9 sm:w-9">
-              <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-            </Button>
-            <Button variant="outline" size="icon" onClick={handleNext} className="h-8 w-8 sm:h-9 sm:w-9">
-              <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-            </Button>
-          </div>
+          {view !== VIEWS.LIST && (
+            <div className="flex gap-1 sm:gap-2">
+              <Button variant="outline" size="icon" onClick={handlePrevious} className="h-8 w-8 sm:h-9 sm:w-9">
+                <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+              </Button>
+              <Button variant="outline" size="icon" onClick={handleNext} className="h-8 w-8 sm:h-9 sm:w-9">
+                <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -513,6 +535,101 @@ export default function Calendar({
               <DayTimeSlot key={hour} hour={hour} isLast={hourIdx === hours.length - 1} />
             ))}
           </div>
+        </div>
+      )}
+
+      {view === VIEWS.LIST && (
+        <div className="flex flex-col h-full overflow-hidden border rounded-lg bg-background">
+          {sortedPosts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+              <div className="mb-4 p-3 rounded-full bg-muted/50">
+                <CalendarIcon className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-sm font-semibold mb-1">No scheduled posts</h3>
+              <p className="text-xs text-muted-foreground mt-2 max-w-xs">
+                Schedule drafts from the sidebar to see them here
+              </p>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
+              <div className="divide-y divide-border">
+                {sortedPosts.map((post) => {
+                  const postDate = new Date(post.scheduled_time)
+                  const isPast = postDate < new Date()
+                  
+                  return (
+                    <Card
+                      key={post.id}
+                      onClick={() => onPostClick && onPostClick(post)}
+                      className={cn(
+                        "cursor-pointer hover:shadow-md transition-all duration-150 border-0 rounded-none border-b border-border hover:bg-accent/50",
+                        isPast && "opacity-60"
+                      )}
+                    >
+                      <CardContent className="p-4 sm:p-5">
+                        <div className="flex items-start gap-3 sm:gap-4">
+                          {/* Platform Icon */}
+                          <div className="flex-shrink-0 mt-0.5">
+                            {post.platform === 'twitter' ? (
+                              <Twitter className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+                            ) : (
+                              <Linkedin className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+                            )}
+                          </div>
+                          
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 sm:gap-3 mb-2 flex-wrap">
+                              <Badge variant="outline" className="text-xs sm:text-sm font-medium">
+                                {format(postDate, 'MMM d, yyyy')}
+                              </Badge>
+                              <Badge variant="secondary" className="text-xs sm:text-sm font-medium">
+                                {format(postDate, 'HH:mm')}
+                              </Badge>
+                              {post.platform && (
+                                <Badge variant="outline" className="text-xs sm:text-sm">
+                                  {post.platform === 'twitter' ? 'Twitter/X' : 'LinkedIn'}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              {(() => {
+                                // Try to get draft name if draft_id exists
+                                if (post.draft_id && drafts.length > 0) {
+                                  const draft = drafts.find(d => d.id === post.draft_id || String(d.id) === String(post.draft_id))
+                                  if (draft && draft.title) {
+                                    return (
+                                      <p className="text-xs sm:text-sm font-semibold text-foreground/80">
+                                        {draft.title}
+                                      </p>
+                                    )
+                                  }
+                                }
+                                return null
+                              })()}
+                              <p className="text-sm sm:text-base leading-relaxed line-clamp-3 text-foreground">
+                                {(() => {
+                                  // Try to get full content from draft if available
+                                  if (post.draft_id && drafts.length > 0) {
+                                    const draft = drafts.find(d => d.id === post.draft_id || String(d.id) === String(post.draft_id))
+                                    if (draft && draft.content) {
+                                      return draft.content
+                                    }
+                                  }
+                                  // Fall back to post content
+                                  return post.content || 'No content'
+                                })()}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

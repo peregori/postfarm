@@ -47,45 +47,48 @@
 * Delete draft (with confirm modal)
 * Toast feedback for delete/undo
 
-### **5. “Edit with AI” Action**
+### **5. “Edit with AI” Action** - DONE
 
-* AI polish button
-* Loading overlay during processing
-* AI stub (local function returning improved text until backend exists)
-* Replace current text & show toast
+* AI polish button - DONE (context-aware: edit when text selected, generate otherwise)
+* Loading overlay during processing - DONE
+* AI integration with backend - DONE (replaces stub)
+* Diff view for reviewing changes - DONE
+* Accept/reject changes UI - DONE (trash button to remove unwanted segments)
+* Selection preservation - DONE
+* Replace current text & show toast - DONE
 
 ---
 
-# **PHASE 3 — SCHEDULER (CORE MVP)**
+# **PHASE 3 — SCHEDULER (CORE MVP)** - DONE
 
-### **6. Scheduler UI**
+### **6. Scheduler UI** - DONE
 
 * Two views:
 
-  * **Calendar / Grid View**: shows scheduled posts placed at times
-  * **List View**: chronological list of all scheduled posts
-* Scheduled posts display: draft name + platform badge + timestamp
-* Click to open “Reschedule / Unschedule” modal
+  * **Calendar / Grid View**: shows scheduled posts placed at times - DONE
+  * **List View**: chronological list of all scheduled posts - DONE
+* Scheduled posts display: draft name + platform badge + timestamp - DONE
+* Click to open "Reschedule / Unschedule" modal - DONE
 
-### **7. Scheduling Logic**
+### **7. Scheduling Logic** - DONE
 
-* Only confirmed drafts can be scheduled
+* Only confirmed drafts can be scheduled - DONE
 * Local scheduling engine:
 
-  * Generate future time slots
-  * FIFO assignment (next free slot)
-  * Prevent double-booking
-* `scheduleDraft(draftId, timestamp)`
-* `unscheduleDraft(draftId)`
-* When confirming a draft in Inbox → optionally show “Schedule now?”
+  * Generate future time slots - DONE (via calendar views)
+  * FIFO assignment (next free slot) - DONE (handled by backend)
+  * Prevent double-booking - DONE (backend validation)
+* `scheduleDraft(draftId, timestamp)` - DONE
+* `unscheduleDraft(draftId)` - DONE
+* When confirming a draft in Inbox → optionally show "Schedule now?" - DONE
 
-### **8. Interactions**
+### **8. Interactions** - DONE
 
-* Drag draft card → drop onto a time slot
-* Or select a draft → click “Schedule” → modal to pick date/time
-* Reschedule via modal
-* Unschedule button
-* Updating scheduledAt updates UI instantly
+* Drag draft card → drop onto a time slot - DONE
+* Or select a draft → click "Schedule" → modal to pick date/time - DONE
+* Reschedule via modal - DONE
+* Unschedule button - DONE
+* Updating scheduledAt updates UI instantly - DONE
 
 ---
 
@@ -107,18 +110,20 @@
 
 # **PHASE 5 — POLISHING THE UX**
 
-### **10. Keyboard & Editing Experience**
+### **10. Keyboard & Editing Experience** - PARTIALLY DONE
 
 * Basic word-processor-like controls:
 
-  * Cmd+A select all
-  * Cmd+C/V copy/paste
-  * Text input repeat on held key
-* “Copy post” button inside Draft Editor
-* Smooth transitions when switching drafts
-* Hover + active states on all cards
-* Modals animated
-* Toasts for every important action
+  * Cmd+A select all - DONE
+  * Cmd+C/V copy/paste - DONE (browser default)
+  * Cmd+Z/Cmd+Shift+Z undo/redo - DONE (custom history system)
+  * Cmd+K smart AI (edit if selected, generate if not) - DONE
+  * Text input repeat on held key - DONE (browser default)
+* “Copy post” button inside Draft Editor - PENDING
+* Smooth transitions when switching drafts - DONE
+* Hover + active states on all cards - DONE
+* Modals animated - DONE
+* Toasts for every important action - DONE
 
 ---
 

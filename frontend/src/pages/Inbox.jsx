@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { 
   FileText, 
   Clock, 
@@ -71,6 +72,9 @@ export default function Inbox() {
   const [showPostNowDialog, setShowPostNowDialog] = useState(false)
   const [postingPlatform, setPostingPlatform] = useState('twitter')
   const [posting, setPosting] = useState(false)
+  const [showSchedulePrompt, setShowSchedulePrompt] = useState(false)
+  const [confirmedDraftId, setConfirmedDraftId] = useState(null)
+  const navigate = useNavigate()
 
   const handleCreateNew = () => {
     createDraft('')
@@ -186,8 +190,15 @@ export default function Inbox() {
       // Confirm the draft (this adds 'confirmed' tag if not present)
       confirmDraft(selectedDraft.id)
       
+      // Store the confirmed draft ID for scheduling prompt
+      setConfirmedDraftId(selectedDraft.id)
+      
       // Clear selection (confirmed drafts are removed from inbox view)
       selectDraft(null)
+      
+      // Show "Schedule now?" prompt
+      setShowSchedulePrompt(true)
+      
       showToast.success('Confirmed', 'Ready for scheduling')
     } catch (error) {
       console.error('Confirm failed:', error)
@@ -560,6 +571,40 @@ export default function Inbox() {
                   Post Now
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Schedule Now Prompt */}
+      <Dialog open={showSchedulePrompt} onOpenChange={setShowSchedulePrompt}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Schedule Now?</DialogTitle>
+            <DialogDescription>
+              Your draft has been confirmed. Would you like to schedule it now?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowSchedulePrompt(false)
+                setConfirmedDraftId(null)
+              }}
+            >
+              Later
+            </Button>
+            <Button
+              onClick={() => {
+                setShowSchedulePrompt(false)
+                if (confirmedDraftId) {
+                  navigate(`/schedule?draftId=${confirmedDraftId}`)
+                }
+                setConfirmedDraftId(null)
+              }}
+            >
+              Schedule Now
             </Button>
           </DialogFooter>
         </DialogContent>
