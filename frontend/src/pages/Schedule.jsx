@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Calendar, Clock, Send, Twitter, Linkedin, CheckCircle, X, Trash2, Search, Plus, Sparkles } from 'lucide-react'
-import { draftsApi, schedulerApi, platformsApi } from '../api/client'
+import { schedulerApi, platformsApi } from '../api/client'
+import useDraftStore from '../stores/draftStore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -45,7 +46,8 @@ export default function Schedule() {
   const contentParam = searchParams.get('content')
   const titleParam = searchParams.get('title')
 
-  const [drafts, setDrafts] = useState([])
+  // Use Zustand store for drafts
+  const drafts = useDraftStore((state) => state.drafts)
   const [selectedDraft, setSelectedDraft] = useState(null)
   const [scheduled, setScheduled] = useState([])
   const [platform, setPlatform] = useState('twitter')
@@ -57,13 +59,16 @@ export default function Schedule() {
   const [sortBy, setSortBy] = useState('newest') // 'newest', 'oldest', 'alphabetical'
 
   useEffect(() => {
-    loadDrafts()
     loadScheduled()
     
     // Handle URL parameters for direct scheduling
     if (draftId || contentParam) {
       if (draftId) {
-        loadDraft(draftId)
+        // Find draft in store by ID
+        const draft = drafts.find(d => d.id === draftId || String(d.id) === String(draftId))
+        if (draft) {
+          setSelectedDraft(draft)
+        }
       } else if (contentParam) {
         setSelectedDraft({
           id: null,
@@ -73,25 +78,7 @@ export default function Schedule() {
       }
       setShowScheduleDialog(true)
     }
-  }, [draftId, contentParam, titleParam])
-
-  const loadDrafts = async () => {
-    try {
-      const data = await draftsApi.list()
-      setDrafts(data)
-    } catch (error) {
-      console.error('Failed to load drafts:', error)
-    }
-  }
-
-  const loadDraft = async (id) => {
-    try {
-      const draft = await draftsApi.get(parseInt(id))
-      setSelectedDraft(draft)
-    } catch (error) {
-      console.error('Failed to load draft:', error)
-    }
-  }
+  }, [draftId, contentParam, titleParam, drafts])
 
   const loadScheduled = async () => {
     try {
@@ -127,7 +114,6 @@ export default function Schedule() {
       setScheduledDate('')
       setScheduledTime('')
       loadScheduled()
-      loadDrafts()
     } catch (error) {
       console.error('Failed to schedule post:', error)
       showToast.error('Schedule Failed', error.response?.data?.detail || 'Failed to schedule post.')
@@ -148,7 +134,6 @@ export default function Schedule() {
       showToast.success('Posted', `Post published to ${platform} successfully!`)
       setSelectedDraft(null)
       loadScheduled()
-      loadDrafts()
     } catch (error) {
       console.error('Failed to post:', error)
       showToast.error('Post Failed', error.response?.data?.detail || 'Failed to post.')
@@ -214,7 +199,6 @@ export default function Schedule() {
         
         showToast.success('Post Scheduled', 'Post scheduled successfully!')
         loadScheduled()
-        loadDrafts()
       } catch (error) {
         console.error('Auto-schedule failed:', error)
         showToast.error('Schedule Failed', error.response?.data?.detail || 'Failed to schedule post.')
@@ -246,8 +230,8 @@ export default function Schedule() {
     const activeId = active.id.toString()
     if (!activeId.startsWith('draft-')) return
     
-    const draftId = parseInt(activeId.replace('draft-', ''))
-    if (isNaN(draftId)) return
+    const draftId = activeId.replace('draft-', '') // UUID string, not integer
+    if (!draftId) return
     
     // Extract date and time from over (format: "timeslot-YYYY-MM-DD-HHMM" or "calendar-day-YYYY-MM-DD")
     const overId = over.id.toString()
@@ -362,7 +346,7 @@ export default function Schedule() {
 
   return (
     <DndContext onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full overflow-hidden">
         {/* Header */}
         <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="flex h-16 items-center gap-4 px-6">
@@ -395,9 +379,9 @@ export default function Schedule() {
         </div>
 
         {/* Main Content */}
-        <div className="flex flex-1 overflow-hidden h-full">
+        <div className="flex flex-1 overflow-hidden min-h-0">
           {/* Drafts Sidebar */}
-          <div className="w-64 border-r bg-muted/30 overflow-y-auto scrollbar-thin transition-all duration-200">
+          <div className="w-64 border-r bg-muted/30 overflow-y-auto scrollbar-thin transition-all duration-200 min-h-0">
             <div className="p-4">
           
           {filteredDrafts.length === 0 ? (

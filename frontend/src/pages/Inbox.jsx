@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { 
   FileText, 
   Clock, 
@@ -11,7 +11,8 @@ import {
   Sparkles,
   Edit
 } from 'lucide-react'
-import { draftsApi, platformsApi } from '../api/client'
+import { llmApi, platformsApi } from '../api/client'
+import useDraftStore from '../stores/draftStore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -48,10 +49,22 @@ const getPlatformFromTags = (tags) => {
 }
 
 export default function Inbox() {
-  const [drafts, setDrafts] = useState([])
-  const [selectedDraft, setSelectedDraft] = useState(null)
+  // Zustand store hooks
+  const drafts = useDraftStore((state) => state.drafts)
+  const selectedDraftId = useDraftStore((state) => state.selectedDraftId)
+  const selectedDraft = useDraftStore((state) => 
+    state.selectedDraftId 
+      ? state.drafts.find((d) => d.id === state.selectedDraftId) || null
+      : null
+  )
+  const selectDraft = useDraftStore((state) => state.selectDraft)
+  const createDraft = useDraftStore((state) => state.createDraft)
+  const updateDraft = useDraftStore((state) => state.updateDraft)
+  const deleteDraft = useDraftStore((state) => state.deleteDraft)
+  const confirmDraft = useDraftStore((state) => state.confirmDraft)
+
   const [searchQuery, setSearchQuery] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false) // Store loads from localStorage, so no initial loading needed
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [sortBy, setSortBy] = useState('newest') // 'newest', 'oldest', 'alphabetical'
@@ -59,48 +72,8 @@ export default function Inbox() {
   const [postingPlatform, setPostingPlatform] = useState('twitter')
   const [posting, setPosting] = useState(false)
 
-  useEffect(() => {
-    loadDrafts()
-    const interval = setInterval(loadDrafts, 30000)
-    return () => clearInterval(interval)
-  }, [])
-
-  useEffect(() => {
-    if (selectedDraft) {
-      // Find the full draft data
-      const fullDraft = drafts.find(d => d.id === selectedDraft.id)
-      if (fullDraft) {
-        setSelectedDraft(fullDraft)
-      }
-    }
-  }, [drafts, selectedDraft?.id])
-
-  const loadDrafts = async () => {
-    try {
-      const data = await draftsApi.list()
-      setDrafts(data)
-      
-      // Update selected draft if it exists
-      if (selectedDraft) {
-        const updated = data.find(d => d.id === selectedDraft.id)
-        if (updated) {
-          setSelectedDraft(updated)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load drafts:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleCreateNew = () => {
-    const newDraft = {
-      id: null,
-      content: '',
-      created_at: new Date().toISOString(),
-    }
-    setSelectedDraft(newDraft)
+    createDraft('')
   }
 
   const handleSave = async ({ content }) => {
@@ -121,33 +94,27 @@ export default function Inbox() {
           }
         }
         
-        const updated = await draftsApi.update(selectedDraft.id, { 
+        // Update draft in store
+        updateDraft(selectedDraft.id, { 
           content,
           title: titleToSave 
         })
-        setDrafts(drafts.map(d => d.id === updated.id ? updated : d))
-        setSelectedDraft(updated)
       } else {
         // Create new draft with auto-generated title
-        let titleToSave = null
+        const newDraft = createDraft(content)
+        
+        // Generate title if content is sufficient
         if (content && content.trim().length > 10) {
           try {
             const titleResponse = await llmApi.generateTitle(content)
-            titleToSave = titleResponse.title
+            updateDraft(newDraft.id, { title: titleResponse.title })
           } catch (error) {
             console.error('Title generation failed:', error)
             // Use fallback
-            titleToSave = content.substring(0, 50)
-            if (content.length > 50) titleToSave += '...'
+            const fallbackTitle = content.substring(0, 50) + (content.length > 50 ? '...' : '')
+            updateDraft(newDraft.id, { title: fallbackTitle })
           }
         }
-        
-        const created = await draftsApi.create({ 
-          content,
-          title: titleToSave 
-        })
-        setDrafts([created, ...drafts])
-        setSelectedDraft(created)
       }
       return true
     } catch (error) {
@@ -160,7 +127,7 @@ export default function Inbox() {
     if (!selectedDraft?.id || deleting) {
       if (!selectedDraft?.id) {
         // New draft, just clear selection
-        setSelectedDraft(null)
+        selectDraft(null)
         setShowDeleteDialog(false)
       }
       return
@@ -169,9 +136,8 @@ export default function Inbox() {
     setDeleting(true)
 
     try {
-      await draftsApi.delete(selectedDraft.id)
-      setDrafts(drafts.filter(d => d.id !== selectedDraft.id))
-      setSelectedDraft(null)
+      // Delete from store
+      deleteDraft(selectedDraft.id)
       showToast.success('Draft Deleted', 'Draft deleted successfully.')
       setShowDeleteDialog(false)
     } catch (error) {
@@ -187,7 +153,7 @@ export default function Inbox() {
   const handleDiscard = () => {
     // For new drafts, just clear selection
     if (!selectedDraft?.id) {
-      setSelectedDraft(null)
+      selectDraft(null)
       return
     }
     // For existing drafts, show delete dialog
@@ -211,23 +177,18 @@ export default function Inbox() {
         updatedTags.push(`platform:${platform}`)
       }
       
-      if (!hasConfirmedTag) {
-        updatedTags.push('confirmed')
-        const updated = await draftsApi.update(selectedDraft.id, { 
-          content,
-          tags: updatedTags 
-        })
-        
-        // Remove confirmed draft from inbox list
-        setDrafts(drafts.filter(d => d.id !== updated.id))
-        setSelectedDraft(null)
-        showToast.success('Confirmed', 'Ready for scheduling')
-      } else {
-        // Just update content and tags if already confirmed
-        const updated = await draftsApi.update(selectedDraft.id, { content, tags: updatedTags })
-        setDrafts(drafts.filter(d => d.id !== updated.id))
-        setSelectedDraft(null)
-      }
+      // Update content and tags in store
+      updateDraft(selectedDraft.id, { 
+        content,
+        tags: updatedTags 
+      })
+      
+      // Confirm the draft (this adds 'confirmed' tag if not present)
+      confirmDraft(selectedDraft.id)
+      
+      // Clear selection (confirmed drafts are removed from inbox view)
+      selectDraft(null)
+      showToast.success('Confirmed', 'Ready for scheduling')
     } catch (error) {
       console.error('Confirm failed:', error)
       showToast.error('Failed', 'Could not confirm draft')
@@ -302,7 +263,7 @@ export default function Inbox() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex h-16 items-center gap-4 px-6">
@@ -343,9 +304,9 @@ export default function Inbox() {
       </div>
 
       {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden h-full">
+      <div className="flex flex-1 overflow-hidden min-h-0">
         {/* Drafts Sidebar */}
-        <div className="w-64 border-r bg-muted/30 overflow-y-auto">
+        <div className="w-64 border-r bg-muted/30 overflow-y-auto min-h-0">
           <div className="p-4">
             {/* Sort Filter */}
             <div className="mb-4">
@@ -404,7 +365,7 @@ export default function Inbox() {
                   return (
                     <Card
                       key={draft.id}
-                      onClick={() => setSelectedDraft(draft)}
+                      onClick={() => selectDraft(draft.id)}
                       className={cn(
                         "group cursor-pointer transition-all border-border/80 hover:border-border hover:shadow-sm",
                         isActive && "border-primary/80 shadow-sm bg-accent/50"
