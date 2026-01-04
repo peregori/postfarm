@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Sparkles, Eye, X, Send, Loader2, Check, XCircle, ArrowRight, CheckCircle, Globe, Undo2, Redo2, Copy } from 'lucide-react'
+import { Sparkles, Eye, X, Send, Loader2, Check, XCircle, ArrowRight, CheckCircle, Globe, Undo2, Redo2, Copy, Trash2 } from 'lucide-react'
 import * as simpleIcons from 'simple-icons'
 import { llmApi } from '../api/client'
 import { Button } from '@/components/ui/button'
@@ -39,6 +39,7 @@ export default function DraftEditor({
   const promptTextareaRef = useRef(null)
   const editTextareaRef = useRef(null)
   const autosaveTimeoutRef = useRef(null)
+  const preservedSelectionRef = useRef(null) // Store selection to restore after click
   
   // AI prompt states
   const [showGeneratePrompt, setShowGeneratePrompt] = useState(false)
@@ -54,14 +55,13 @@ export default function DraftEditor({
   // Selection states
   const [selectedText, setSelectedText] = useState('')
   const [selectionRange, setSelectionRange] = useState(null)
-  const [fabPosition, setFabPosition] = useState(null) // { x, y }
   
   // AI operation states
   const [isGenerating, setIsGenerating] = useState(false)
   const [pendingAiChange, setPendingAiChange] = useState(null) // { originalContent, newContent, changeType, selectionRange }
   const [promptHasMultipleLines, setPromptHasMultipleLines] = useState(false)
   const [editHasMultipleLines, setEditHasMultipleLines] = useState(false)
-  const [acceptedSegments, setAcceptedSegments] = useState(new Set()) // Track which diff segments are accepted
+  const [rejectedSegments, setRejectedSegments] = useState(new Set()) // Track which diff segments are rejected (to be removed)
   
   // Undo/Redo state (20-level history)
   const [historyStack, setHistoryStack] = useState([])
@@ -143,7 +143,7 @@ export default function DraftEditor({
       const draftContent = draft.content || ''
       setContent(draftContent)
       setPendingAiChange(null)
-      setAcceptedSegments(new Set())
+      setRejectedSegments(new Set())
       // Initialize history with the draft content
       setHistoryStack([draftContent])
       setHistoryIndex(0)
@@ -198,15 +198,14 @@ export default function DraftEditor({
       // Only handle if selection is within the editor container
       const selection = window.getSelection()
       if (!selection || selection.rangeCount === 0) {
-        // Small delay to allow selection to complete
-        setTimeout(() => {
-          const currentSelection = window.getSelection()
-          if (!currentSelection || currentSelection.rangeCount === 0) {
-            setSelectedText('')
-            setSelectionRange(null)
-            setFabPosition(null)
-          }
-        }, 100)
+          // Small delay to allow selection to complete
+          setTimeout(() => {
+            const currentSelection = window.getSelection()
+            if (!currentSelection || currentSelection.rangeCount === 0) {
+              setSelectedText('')
+              setSelectionRange(null)
+            }
+          }, 100)
         return
       }
 
@@ -224,7 +223,7 @@ export default function DraftEditor({
 
     document.addEventListener('selectionchange', handleSelectionChange)
     return () => document.removeEventListener('selectionchange', handleSelectionChange)
-  }, [pendingAiChange, acceptedSegments])
+  }, [pendingAiChange, rejectedSegments])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -253,7 +252,7 @@ export default function DraftEditor({
         }
       }
       
-      // Cmd+K / Ctrl+K: Toggle generation prompt
+      // Cmd+K / Ctrl+K: Smart AI - edit if text selected, generate if not
       if ((e.metaKey || e.ctrlKey) && e.key === 'k' && !e.shiftKey) {
         e.preventDefault()
         if (!pendingAiChange) {
@@ -262,7 +261,52 @@ export default function DraftEditor({
           } else if (showEditPrompt) {
             closeEditPrompt()
           } else {
-            setShowGeneratePrompt(true)
+            // Preserve current selection before opening prompt
+            const selection = window.getSelection()
+            let preservedText = selectedText
+            let preservedRange = selectionRange
+            let preservedDomRange = null
+            
+            // If we have a window selection, capture it and the DOM range
+            if (selection && selection.rangeCount > 0) {
+              preservedDomRange = selection.getRangeAt(0).cloneRange()
+              const selectedTextFromWindow = selection.toString().trim()
+              if (selectedTextFromWindow.length > 0) {
+                preservedText = selectedTextFromWindow
+                // Try to preserve the range if it's in textarea
+                if (textareaRef.current && !pendingAiChange) {
+                  const start = textareaRef.current.selectionStart
+                  const end = textareaRef.current.selectionEnd
+                  if (start !== end) {
+                    preservedRange = { start, end }
+                  }
+                }
+              }
+            }
+            
+            // If text is selected, open edit prompt; otherwise generate
+            if (preservedText && preservedText.trim().length > 0) {
+              // Ensure selection state is set before opening prompt
+              setSelectedText(preservedText)
+              if (preservedRange) {
+                setSelectionRange(preservedRange)
+              }
+              
+              // Restore visual selection after a brief delay
+              setTimeout(() => {
+                if (preservedDomRange) {
+                  const newSelection = window.getSelection()
+                  newSelection.removeAllRanges()
+                  newSelection.addRange(preservedDomRange)
+                } else if (textareaRef.current && preservedRange) {
+                  textareaRef.current.setSelectionRange(preservedRange.start, preservedRange.end)
+                }
+              }, 10)
+              
+              setShowEditPrompt(true)
+            } else {
+              setShowGeneratePrompt(true)
+            }
           }
         }
       }
@@ -335,7 +379,6 @@ export default function DraftEditor({
     setEditInstruction('')
     setSelectedText('')
     setSelectionRange(null)
-    setFabPosition(null)
     setEditHasMultipleLines(false)
   }
 
@@ -373,96 +416,39 @@ export default function DraftEditor({
 
   // Text selection detection
   const handleTextSelection = () => {
-    const selection = window.getSelection()
-    if (!selection || selection.rangeCount === 0) {
-      setSelectedText('')
-      setSelectionRange(null)
-      setFabPosition(null)
-      return
-    }
-    
-    const selectedText = selection.toString().trim()
-    if (selectedText.length === 0) {
-      setSelectedText('')
-      setSelectionRange(null)
-      setFabPosition(null)
-      return
-    }
-    
-    // Get the selected text
-    setSelectedText(selectedText)
-    console.log('Selection detected:', selectedText.substring(0, 50))
-    
-    // For textarea, use existing logic (works for both normal text and after accepting AI changes)
-    if (textareaRef.current) {
+    // Priority 1: Check textarea selection (most common case)
+    if (textareaRef.current && !pendingAiChange) {
       const start = textareaRef.current.selectionStart
       const end = textareaRef.current.selectionEnd
-      setSelectionRange({ start, end })
       
-      // Calculate FAB position using viewport coordinates
-      const textarea = textareaRef.current
-      const coordinates = getCaretCoordinates(textarea, end)
-      const rect = textarea.getBoundingClientRect()
-      
-      // Use viewport coordinates for fixed positioning
-      setFabPosition({
-        x: rect.left + coordinates.left,
-        y: rect.top + coordinates.top + coordinates.height + 8
-      })
-    } else {
-      // For diff view, preview panel, or any other content, calculate position from selection range
-      try {
-        const range = selection.getRangeAt(0)
-        const rect = range.getBoundingClientRect()
-        // Use viewport coordinates for fixed positioning (works everywhere)
-        setFabPosition({
-          x: rect.left + rect.width / 2,
-          y: rect.bottom + 8
-        })
-        // For diff content, we don't have precise start/end positions, so set a placeholder
-        setSelectionRange({ start: 0, end: selectedText.length })
-      } catch (error) {
-        // Fallback if range calculation fails
-        console.error('Error calculating FAB position:', error)
-        setFabPosition(null)
+      if (start !== end && end > start) {
+        // Text is selected in textarea
+        const selectedText = textareaRef.current.value.substring(start, end).trim()
+        if (selectedText.length > 0) {
+          setSelectedText(selectedText)
+          setSelectionRange({ start, end })
+          return
+        }
       }
     }
+    
+    // Priority 2: Check window selection (for diff view, preview, etc.)
+    const selection = window.getSelection()
+    if (selection && selection.rangeCount > 0) {
+      const selectedText = selection.toString().trim()
+      if (selectedText.length > 0) {
+        setSelectedText(selectedText)
+        // For diff content, we don't have precise start/end positions
+        setSelectionRange({ start: 0, end: selectedText.length })
+        return
+      }
+    }
+    
+    // No selection found
+    setSelectedText('')
+    setSelectionRange(null)
   }
 
-  // Helper to get caret coordinates (approximate)
-  const getCaretCoordinates = (element, offset) => {
-    const div = document.createElement('div')
-    const style = getComputedStyle(element)
-    const styles = [
-      'position', 'top', 'left', 'visibility', 'white-space',
-      'font', 'font-size', 'font-family', 'line-height', 'padding'
-    ]
-    
-    styles.forEach(prop => {
-      div.style[prop] = style[prop]
-    })
-    
-    div.style.position = 'absolute'
-    div.style.visibility = 'hidden'
-    div.textContent = element.value.substring(0, offset)
-    div.innerHTML = div.innerHTML.replace(/\n/g, '<br>')
-    
-    document.body.appendChild(div)
-    const span = document.createElement('span')
-    span.textContent = element.value.substring(offset) || ' '
-    div.appendChild(span)
-    
-    const rect = span.getBoundingClientRect()
-    const elementRect = element.getBoundingClientRect()
-    
-    document.body.removeChild(div)
-    
-    return {
-      top: rect.top - elementRect.top,
-      left: rect.left - elementRect.left,
-      height: rect.height
-    }
-  }
 
   const handleContentChange = (newContent) => {
     if (pendingAiChange) {
@@ -481,7 +467,6 @@ export default function DraftEditor({
     // Clear selection when content changes
     setSelectedText('')
     setSelectionRange(null)
-    setFabPosition(null)
   }
 
   const handleGenerate = async () => {
@@ -678,7 +663,6 @@ export default function DraftEditor({
         setEditInstruction('')
         setSelectedText('')
         setSelectionRange(null)
-        setFabPosition(null)
         showToast.success('Content Edited', 'Review the changes and accept or discard.')
       }
     } catch (error) {
@@ -696,22 +680,21 @@ export default function DraftEditor({
     const original = pendingAiChange.originalContent || ''
     const modified = pendingAiChange.newContent || ''
     const segments = calculateDiff(original, modified)
-    const addedSegments = segments.filter(s => s.type === 'added')
     
-    // If there are individually accepted segments, build content from those
+    // Build content excluding rejected segments
     let finalContent = pendingAiChange.newContent
     
-    if (segments.length > 0 && acceptedSegments.size > 0 && acceptedSegments.size < addedSegments.length) {
-      // Partial acceptance - build from accepted segments + equal parts
+    if (segments.length > 0 && rejectedSegments.size > 0) {
+      // Build content excluding rejected segments
       finalContent = segments
         .filter((segment, index) => {
           if (segment.type === 'equal') return true
           if (segment.type === 'removed') return false
-          if (segment.type === 'added') return acceptedSegments.has(index)
+          if (segment.type === 'added') return !rejectedSegments.has(index) // Exclude rejected segments
           return true
         })
         .map(s => s.text)
-        .join('\n')
+        .join('') // Join segments (they already contain newlines if needed)
     }
     
     // Record history for AI acceptance (treat as single atomic operation)
@@ -719,7 +702,7 @@ export default function DraftEditor({
     
     setContent(finalContent)
     setPendingAiChange(null)
-    setAcceptedSegments(new Set())
+    setRejectedSegments(new Set())
     showToast.success('Changes Applied', 'AI changes have been applied to your draft.')
     
     // Clear selection if any
@@ -732,8 +715,8 @@ export default function DraftEditor({
     if (!pendingAiChange) return
     
     setPendingAiChange(null)
-    setAcceptedSegments(new Set())
-    showToast.info('Changes Discarded', 'Original content preserved.')
+    setRejectedSegments(new Set())
+    showToast.info('Changes Cancelled', 'Original content preserved.')
     
     // Restore selection state if it was an edit
     if (pendingAiChange.changeType === 'edit-selection' && pendingAiChange.selectionRange) {
@@ -824,7 +807,7 @@ export default function DraftEditor({
   return (
     <div className="flex flex-col h-full relative transition-all duration-300">
       {/* Header with View Toggle */}
-      <div className="flex items-center justify-between px-4 py-2 border-b">
+      <div className="flex items-center justify-between px-4 py-2 border-b flex-shrink-0">
         <div className="flex items-center gap-4">
           <Tabs value={viewMode} onValueChange={setViewMode} className="w-auto">
             <TabsList size="sm">
@@ -916,7 +899,7 @@ export default function DraftEditor({
       </div>
 
 
-      {/* Editor/Preview Content */}
+      {/* Editor/Preview Content - Scrollable area */}
       <div className="flex-1 overflow-hidden flex flex-col min-h-0 editor-container">
         {viewMode === 'split' && (
           <div className="flex flex-1 overflow-hidden min-h-0 relative gap-4 p-2 bg-muted/30">
@@ -966,45 +949,138 @@ export default function DraftEditor({
                 </div>
               </div>
               
-              <div className="flex-1 p-4 overflow-y-auto min-h-0 relative scrollbar-thin">
-                {/* Global Discard/Accept buttons - placed at top of diff content */}
+              <div className="flex-1 p-4 overflow-y-auto overflow-x-hidden min-h-0 relative scrollbar-thin">
+                {/* Global Cancel/Apply buttons - placed at top of diff content */}
                 {pendingAiChange && diffSegments.length > 0 && (
                   <div className="mb-4 flex items-center justify-between pb-3 border-b border-border/50">
-                    <span className="text-xs text-muted-foreground font-medium">Review changes</span>
+                    <span className="text-xs text-muted-foreground font-medium">
+                      Review changes
+                    </span>
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={handleDiscardAiChange}
-                        className="px-2.5 py-1 text-xs bg-red-700 hover:bg-red-800 text-white transition-colors rounded"
+                        className="px-3 py-1.5 text-xs bg-muted hover:bg-muted/80 text-muted-foreground transition-colors rounded min-w-[80px]"
                       >
-                        Discard all
+                        Cancel
                       </button>
                       <button
                         onClick={handleAcceptAiChange}
-                        className="px-2.5 py-1 text-xs bg-green-700 hover:bg-green-800 text-white transition-colors rounded"
+                        className="px-3 py-1.5 text-xs bg-primary hover:bg-primary/90 text-primary-foreground transition-colors rounded min-w-[80px]"
                       >
-                        Confirm All
+                        Apply Changes
                       </button>
                     </div>
                   </div>
                 )}
-                {/* AI Generate Button - Hide when showing diff content or when prompt is open */}
+                {/* AI Button - Smart behavior: edit if text selected, generate if not */}
                 {!pendingAiChange && !showGeneratePrompt && !showEditPrompt && (
                   <div className="absolute top-4 right-4 z-20">
                     <Button
                       size="sm"
                       variant="ghost"
                       className="h-7 w-7 p-0 rounded-md hover:bg-accent/50 border border-border/50 bg-background/80 backdrop-blur-sm"
-                      onClick={() => {
-                        if (showEditPrompt) {
-                          // Switch from edit to generate
-                          closeEditPrompt()
-                          setShowGeneratePrompt(true)
+                      onMouseDown={(e) => {
+                        // Capture selection BEFORE click clears it
+                        const selection = window.getSelection()
+                        let preservedText = selectedText
+                        let preservedRange = selectionRange
+                        let preservedDomRange = null
+                        
+                        // If we have a window selection, capture it and the DOM range
+                        if (selection && selection.rangeCount > 0) {
+                          try {
+                            preservedDomRange = selection.getRangeAt(0).cloneRange()
+                            const selectedTextFromWindow = selection.toString().trim()
+                            if (selectedTextFromWindow.length > 0) {
+                              preservedText = selectedTextFromWindow
+                            }
+                          } catch (err) {
+                            // Couldn't clone range
+                          }
+                        }
+                        
+                        // Try to preserve the range if it's in textarea
+                        if (textareaRef.current && !pendingAiChange) {
+                          const start = textareaRef.current.selectionStart
+                          const end = textareaRef.current.selectionEnd
+                          if (start !== end) {
+                            preservedRange = { start, end }
+                          }
+                        }
+                        
+                        // Store in ref for use in onClick (survives the click event)
+                        if (preservedText && preservedText.trim().length > 0) {
+                          preservedSelectionRef.current = {
+                            text: preservedText,
+                            range: preservedRange,
+                            domRange: preservedDomRange
+                          }
                         } else {
-                          // Open generate
+                          preservedSelectionRef.current = null
+                        }
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        
+                        const preserved = preservedSelectionRef.current
+                        const preservedText = preserved?.text || selectedText
+                        const preservedRange = preserved?.range || selectionRange
+                        const preservedDomRange = preserved?.domRange
+                        
+                        // If text is selected, open edit prompt
+                        if (preservedText && preservedText.trim().length > 0) {
+                          // Ensure selection state is set before opening prompt
+                          setSelectedText(preservedText)
+                          if (preservedRange) {
+                            setSelectionRange(preservedRange)
+                          }
+                          
+                          setShowEditPrompt(true)
+                          
+                          // Restore visual selection immediately and repeatedly until it sticks
+                          const restoreSelection = () => {
+                            // Try to restore textarea selection first (most reliable)
+                            if (textareaRef.current && preservedRange && preservedRange.start !== undefined) {
+                              try {
+                                textareaRef.current.setSelectionRange(preservedRange.start, preservedRange.end)
+                                return true
+                              } catch (err) {
+                                // Couldn't restore textarea selection
+                              }
+                            }
+                            
+                            // Try to restore window selection using preserved DOM range
+                            if (preservedDomRange) {
+                              try {
+                                const selection = window.getSelection()
+                                selection.removeAllRanges()
+                                selection.addRange(preservedDomRange)
+                                return true
+                              } catch (err) {
+                                // Couldn't restore - range might be invalid now
+                              }
+                            }
+                            
+                            return false
+                          }
+                          
+                          // Try to restore immediately
+                          if (!restoreSelection()) {
+                            // If that didn't work, try again after a short delay
+                            setTimeout(() => {
+                              if (!restoreSelection()) {
+                                // Last attempt after state update
+                                setTimeout(() => restoreSelection(), 100)
+                              }
+                            }, 10)
+                          }
+                        } else {
+                          // No selection, open generate prompt
                           setShowGeneratePrompt(true)
                         }
                       }}
-                      title="Generate with AI (⌘K)"
+                      title={selectedText && selectedText.trim().length > 0 ? "Edit selection with AI (⌘K)" : "Generate with AI (⌘K)"}
                     >
                       <span className="text-xs text-muted-foreground">AI</span>
                     </Button>
@@ -1110,16 +1186,17 @@ export default function DraftEditor({
                       <div className="space-y-0.5" style={{ userSelect: 'text', WebkitUserSelect: 'text' }}>
                         {diffSegments.map((segment, index) => {
                           const key = `${segment.type}-${segment.line}-${index}`
-                          const isAccepted = acceptedSegments.has(index)
-                          const isRejected = segment.type === 'removed' || (segment.type === 'added' && !isAccepted)
+                          const isRejected = rejectedSegments.has(index)
                           
                           let className = ''
                           let bgColor = ''
                           if (segment.type === 'equal') {
                             className = 'text-foreground whitespace-pre-wrap py-1'
                           } else if (segment.type === 'added') {
-                            className = 'bg-green-500/5 border-l-[3px] border-green-500/40 pl-3 pr-3 py-1.5 whitespace-pre-wrap text-foreground rounded-r-sm'
-                            bgColor = isAccepted ? 'bg-green-500/10' : 'bg-green-500/5'
+                            className = isRejected 
+                              ? 'bg-red-500/10 border-l-[3px] border-red-500/40 pl-3 pr-3 py-1.5 whitespace-pre-wrap text-foreground/50 line-through rounded-r-sm'
+                              : 'bg-green-500/5 border-l-[3px] border-green-500/40 pl-3 pr-3 py-1.5 whitespace-pre-wrap text-foreground rounded-r-sm'
+                            bgColor = isRejected ? 'bg-red-500/10' : 'bg-green-500/5'
                           } else if (segment.type === 'removed') {
                             className = 'bg-red-500/5 border-l-[3px] border-red-500/40 pl-3 pr-3 py-1.5 whitespace-pre-wrap text-foreground/50 line-through rounded-r-sm'
                           }
@@ -1133,22 +1210,22 @@ export default function DraftEditor({
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    const newAccepted = new Set(acceptedSegments)
-                                    if (newAccepted.has(index)) {
-                                      newAccepted.delete(index)
+                                    const newRejected = new Set(rejectedSegments)
+                                    if (newRejected.has(index)) {
+                                      newRejected.delete(index)
                                     } else {
-                                      newAccepted.add(index)
+                                      newRejected.add(index)
                                     }
-                                    setAcceptedSegments(newAccepted)
+                                    setRejectedSegments(newRejected)
                                   }}
-                                  className={`shrink-0 w-6 h-6 flex items-center justify-center text-[10px] rounded transition-colors mt-0.5 ${
-                                    isAccepted 
-                                      ? 'bg-primary text-primary-foreground' 
-                                      : 'bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary opacity-0 group-hover:opacity-100'
+                                  className={`shrink-0 w-6 h-6 flex items-center justify-center rounded transition-colors mt-0.5 ${
+                                    isRejected 
+                                      ? 'bg-red-500/20 text-red-600 hover:bg-red-500/30' 
+                                      : 'bg-muted text-muted-foreground hover:bg-red-500/20 hover:text-red-600 opacity-0 group-hover:opacity-100'
                                   }`}
-                                  title={isAccepted ? 'Remove' : 'Keep this line'}
+                                  title={isRejected ? 'Restore this' : 'Remove this'}
                                 >
-                                  {isAccepted ? '✓' : '○'}
+                                  <Trash2 className={`h-3.5 w-3.5 ${isRejected ? 'opacity-100' : 'opacity-60'}`} />
                                 </button>
                               )}
                               <div 
@@ -1199,11 +1276,17 @@ export default function DraftEditor({
                     onKeyUp={handleTextSelection}
                     onFocus={() => {
                       // Close prompts when focusing textarea to write
-                      if (showGeneratePrompt || showEditPrompt) {
+                      // But don't clear selection if edit prompt is open and we have a selection
+                      if (showGeneratePrompt) {
                         setShowGeneratePrompt(false)
-                        setShowEditPrompt(false)
                         setGeneratePrompt('')
-                        setEditInstruction('')
+                      } else if (showEditPrompt) {
+                        // Only close edit prompt if there's no selection to preserve
+                        // Otherwise keep it open so user can still see what they're editing
+                        if (!selectedText || selectedText.trim().length === 0) {
+                          setShowEditPrompt(false)
+                          setEditInstruction('')
+                        }
                       }
                     }}
                     onClick={() => {
@@ -1225,7 +1308,9 @@ export default function DraftEditor({
                       outline: 'none',
                       boxShadow: 'none',
                       scrollbarWidth: 'none',
-                      msOverflowStyle: 'none'
+                      msOverflowStyle: 'none',
+                      overflowY: 'auto',
+                      overflowX: 'hidden'
                     }}
                   />
                 )}
@@ -1234,7 +1319,7 @@ export default function DraftEditor({
             </div>
 
             <div className="w-[2px] bg-border shrink-0 absolute left-1/2 inset-y-0 -translate-x-1/2" />
-            <div className="w-1/2 flex flex-col rounded-lg border bg-background shadow-sm relative" style={{ height: '100%', minHeight: 0 }}>
+            <div className="w-1/2 flex flex-col rounded-lg border bg-background shadow-sm relative overflow-hidden">
               {/* Copy Button - Top Right of Preview Panel */}
               {previewContent && (
                 <div className="absolute top-4 right-4 z-20">
@@ -1258,8 +1343,8 @@ export default function DraftEditor({
                 </div>
               )}
               <div 
-                className="p-4 pr-12 overflow-y-auto flex-1 scrollbar-thin select-text" 
-                style={{ height: '100%', maxHeight: '100%', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                className="p-4 pr-12 overflow-y-auto overflow-x-hidden flex-1 scrollbar-thin select-text" 
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 onMouseUp={(e) => {
                   // Enable text selection in preview panel
                   setTimeout(() => handleTextSelection(), 10)
@@ -1295,7 +1380,7 @@ export default function DraftEditor({
 
         {viewMode === 'preview' && (
           <div 
-            className="h-full overflow-y-auto p-6 select-text relative scrollbar-thin"
+            className="h-full overflow-y-auto overflow-x-hidden p-6 select-text relative scrollbar-thin"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             onMouseUp={(e) => {
               // Enable text selection in preview mode
@@ -1359,42 +1444,10 @@ export default function DraftEditor({
         )}
       </div>
 
-      {/* Floating Action Button for Selection - Works everywhere text can be selected */}
-      {fabPosition && selectedText && selectedText.trim().length > 0 && !showEditPrompt && !showGeneratePrompt && (
-        <div
-          className="fixed z-50 transition-opacity duration-200 pointer-events-auto"
-          style={{
-            left: `${fabPosition.x}px`,
-            top: `${fabPosition.y}px`,
-            transform: 'translate(-50%, 8px)'
-          }}
-          onClick={(e) => {
-            e.stopPropagation()
-          }}
-        >
-          <Button
-            size="sm"
-            className="h-8 w-8 rounded-full p-0 shadow-lg bg-primary hover:bg-primary/90 pointer-events-auto"
-            onClick={(e) => {
-              e.stopPropagation()
-              e.preventDefault()
-              console.log('Edit button clicked, selectedText:', selectedText.substring(0, 50))
-              if (selectedText && selectedText.trim().length > 0) {
-                setShowGeneratePrompt(false)
-                setShowEditPrompt(true)
-                console.log('Edit prompt should be shown')
-              }
-            }}
-            title="Edit selected text with AI"
-          >
-            <Sparkles className="h-4 w-4 text-primary-foreground" />
-          </Button>
-        </div>
-      )}
 
-      {/* Actions Bar */}
+      {/* Actions Bar - Fixed at bottom */}
       {showActions && (
-        <div className="flex items-center justify-between p-4 border-t bg-muted/30">
+        <div className="flex items-center justify-between p-4 border-t bg-muted/30 flex-shrink-0">
           <div className="flex items-center gap-2">
             {/* Writing Stats */}
             {content.trim() && (
