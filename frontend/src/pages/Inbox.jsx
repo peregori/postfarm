@@ -317,81 +317,81 @@ export default function Inbox() {
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden min-h-0">
         {/* Drafts Sidebar */}
-        <div className="w-64 border-r bg-muted/30 overflow-y-auto min-h-0">
-          <div className="p-4">
-            {/* Sort Filter */}
-            <div className="mb-4">
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-full h-8 text-xs border-muted/50 bg-background hover:bg-muted/20 focus:bg-background focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-muted/50 transition-all duration-200">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="newest">Newest First</SelectItem>
-                  <SelectItem value="oldest">Oldest First</SelectItem>
-                  <SelectItem value="alphabetical">Alphabetical</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {loading ? (
-              <div className="flex items-center justify-center py-12 text-muted-foreground">
-                <div className="text-sm">Loading...</div>
-              </div>
-            ) : filteredDrafts.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-                <div className="mb-4 p-3 rounded-full bg-muted/50">
-                  <FileText className="h-8 w-8 text-muted-foreground" />
+        <div className="w-64 sm:w-64 md:w-64 border-r bg-muted/30 flex flex-col h-full min-h-0 flex-shrink-0">
+          <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <div className="p-4">
+              {loading ? (
+                <div className="flex items-center justify-center py-12 text-muted-foreground">
+                  <div className="text-sm">Loading...</div>
                 </div>
-                <h3 className="text-sm font-semibold mb-1">
-                  {searchQuery ? 'No drafts found' : 'No drafts yet'}
-                </h3>
-                {!searchQuery && (
-                  <>
-                    <p className="text-xs text-muted-foreground mb-4 max-w-xs">
-                      Get started by creating your first draft
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleCreateNew}
-                        className="gap-2"
+              ) : filteredDrafts.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+                  <div className="mb-4 p-3 rounded-full bg-muted/50">
+                    <FileText className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-sm font-semibold mb-1">
+                    {searchQuery ? 'No drafts found' : 'No drafts yet'}
+                  </h3>
+                  {!searchQuery && (
+                    <>
+                      <p className="text-xs text-muted-foreground mb-4 max-w-xs">
+                        Get started by creating your first draft
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleCreateNew}
+                          className="gap-2"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Create Draft
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {/* Sort Filter - Sticky at top */}
+                  <div className="sticky top-0 z-10 mb-4 pb-4 bg-muted/30 backdrop-blur-sm -mx-4 px-4 -mt-4 pt-4">
+                    <Select value={sortBy} onValueChange={setSortBy}>
+                      <SelectTrigger className="w-full h-8 text-xs border-muted/50 bg-background hover:bg-muted/20 focus:bg-background focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-muted/50 transition-all duration-200">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="newest">Newest First</SelectItem>
+                        <SelectItem value="oldest">Oldest First</SelectItem>
+                        <SelectItem value="alphabetical">Alphabetical</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {filteredDrafts.map((draft) => {
+                    const isActive = selectedDraft?.id === draft.id
+                    const preview = getPreviewText(draft.content || '')
+                    const timeAgo = formatDate(draft.created_at)
+                    const hasPrompt = draft.prompt && draft.prompt.trim().length > 0
+                    const draftPlatform = getPlatformFromTags(draft.tags)
+                    
+                    return (
+                      <Card
+                        key={draft.id}
+                        onClick={() => selectDraft(draft.id)}
+                        className={cn(
+                          "group cursor-pointer transition-all border-border/80 hover:border-border hover:shadow-sm",
+                          isActive && "border-primary/80 shadow-sm bg-accent/50"
+                        )}
                       >
-                        <Plus className="h-4 w-4" />
-                        Create Draft
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {filteredDrafts.map((draft) => {
-                  const isActive = selectedDraft?.id === draft.id
-                  const preview = getPreviewText(draft.content || '')
-                  const timeAgo = formatDate(draft.created_at)
-                  const hasPrompt = draft.prompt && draft.prompt.trim().length > 0
-                  const draftPlatform = getPlatformFromTags(draft.tags)
-                  
-                  return (
-                    <Card
-                      key={draft.id}
-                      onClick={() => selectDraft(draft.id)}
-                      className={cn(
-                        "group cursor-pointer transition-all border-border/80 hover:border-border hover:shadow-sm",
-                        isActive && "border-primary/80 shadow-sm bg-accent/50"
-                      )}
-                    >
-                      <CardContent className="p-3">
-                        {/* Header with timestamp and AI indicator */}
-                        <div className="flex items-center justify-between mb-1.5">
-                          <div className="flex items-center gap-1.5">
-                            {hasPrompt && (
-                              <Badge variant="secondary" className="h-3.5 px-1 text-[8px] gap-0.5 opacity-60">
-                                <Sparkles className="h-2 w-2" />
-                              </Badge>
-                            )}
-                            {draftPlatform && (
+                        <CardContent className="p-3">
+                          {/* Header with timestamp and AI indicator */}
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-1.5">
+                              {hasPrompt && (
+                                <Badge variant="secondary" className="h-3.5 px-1 text-[8px] gap-0.5 opacity-60">
+                                  <Sparkles className="h-2 w-2" />
+                                </Badge>
+                              )}
+                              {draftPlatform && (
                               <div className="flex items-center">
                                 {draftPlatform === 'twitter' ? (
                                   <svg
@@ -437,7 +437,8 @@ export default function Inbox() {
                   )
                 })}
               </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 

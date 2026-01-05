@@ -15,13 +15,22 @@ import {
   setHours,
   setMinutes,
 } from 'date-fns'
-import { ChevronLeft, ChevronRight, Twitter, Linkedin, Calendar as CalendarIcon, Grid3x3, LayoutGrid, List } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Grid3x3, LayoutGrid, List, Search, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { useDroppable } from '@dnd-kit/core'
+import * as simpleIcons from 'simple-icons'
 
 // Custom hook for dynamic post visibility calculation
 function useDynamicPostVisibility(dayPosts, cellRef, options = {}) {
@@ -101,6 +110,11 @@ export default function Calendar({
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState(VIEWS.MONTH)
   const [timeRange] = useState(defaultTimeRange)
+  
+  // List view filters
+  const [dateFilter, setDateFilter] = useState('all')
+  const [platformFilter, setPlatformFilter] = useState('all')
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Memoize calculations
   const { days, weekDays } = useMemo(() => {
@@ -136,14 +150,57 @@ export default function Calendar({
     })
   }
 
-  // Sort scheduled posts chronologically for List View
-  const sortedPosts = useMemo(() => {
-    return [...scheduledPosts].sort((a, b) => {
+  // Filter and sort scheduled posts for List View
+  const filteredAndSortedPosts = useMemo(() => {
+    let filtered = [...scheduledPosts]
+    
+    // Date filter
+    if (dateFilter !== 'all') {
+      const now = new Date()
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const tomorrow = addDays(today, 1)
+      const nextWeek = addDays(today, 7)
+      
+      filtered = filtered.filter(post => {
+        const postDate = new Date(post.scheduled_time)
+        switch (dateFilter) {
+          case 'today':
+            return isSameDay(postDate, today)
+          case 'tomorrow':
+            return isSameDay(postDate, tomorrow)
+          case 'next7days':
+            return postDate >= today && postDate < nextWeek
+          case 'upcoming':
+            return postDate >= today
+          case 'past':
+            return postDate < today
+          default:
+            return true
+        }
+      })
+    }
+    
+    // Platform filter
+    if (platformFilter !== 'all') {
+      filtered = filtered.filter(post => post.platform === platformFilter)
+    }
+    
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter(post => {
+        const content = post.content?.toLowerCase() || ''
+        return content.includes(query)
+      })
+    }
+    
+    // Sort chronologically
+    return filtered.sort((a, b) => {
       const dateA = new Date(a.scheduled_time)
       const dateB = new Date(b.scheduled_time)
       return dateA - dateB
     })
-  }, [scheduledPosts])
+  }, [scheduledPosts, dateFilter, platformFilter, searchQuery])
 
   const handlePrevious = () => {
     if (view === VIEWS.MONTH) {
@@ -207,10 +264,10 @@ export default function Calendar({
       <div
         ref={combinedRef}
         className={cn(
-          "min-h-[80px] sm:min-h-[100px] md:min-h-[120px] border-b border-r last:border-r-0 p-2 sm:p-2.5 md:p-3 cursor-pointer transition-all duration-200",
+          "min-h-[80px] sm:min-h-[100px] md:min-h-[120px] border-b border-r last:border-r-0 p-2 sm:p-2.5 md:p-3 cursor-pointer transition-all duration-300",
           !isCurrentMonth && "bg-muted/10 text-muted-foreground",
-          isOver && "bg-primary/10 ring-2 ring-primary/50 shadow-md",
-          "hover:bg-accent/50 hover:shadow-sm"
+          isOver && "bg-primary/15 ring-2 ring-primary/60 shadow-lg scale-[1.02]",
+          "hover:bg-accent/50 hover:shadow-md"
         )}
         onClick={() => onDateClick && onDateClick(day)}
       >
@@ -232,20 +289,38 @@ export default function Calendar({
                 e.stopPropagation()
                 onPostClick && onPostClick(post)
               }}
-              className="cursor-pointer hover:shadow-sm transition-all duration-150 border hover:border-foreground/20"
+              className="cursor-pointer hover:shadow-md transition-all duration-200 border hover:border-foreground/30 active:scale-[0.98]"
             >
               <CardContent className="p-1.5 sm:p-2">
-                <div className="flex items-start gap-1.5 sm:gap-2">
+                <div className="flex items-start gap-1.5 sm:gap-1.5">
                   {post.platform === 'twitter' ? (
-                    <Twitter className="h-2.5 w-2.5 sm:h-3 sm:w-3 mt-0.5 text-muted-foreground shrink-0" />
+                    <svg
+                      role="img"
+                      viewBox="0 0 24 24"
+                      className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0 mt-0.5"
+                      fill="currentColor"
+                      style={{ color: '#000000' }}
+                      preserveAspectRatio="xMidYMid meet"
+                    >
+                      <path d={simpleIcons.siX.path} />
+                    </svg>
                   ) : (
-                    <Linkedin className="h-2.5 w-2.5 sm:h-3 sm:w-3 mt-0.5 text-muted-foreground shrink-0" />
+                    <svg
+                      role="img"
+                      viewBox="0 0 24 24"
+                      className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0 mt-0.5"
+                      fill="currentColor"
+                      style={{ color: '#0A66C2' }}
+                      preserveAspectRatio="xMidYMid meet"
+                    >
+                      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                    </svg>
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-[10px] sm:text-xs font-medium line-clamp-2 mb-0.5 leading-tight">
+                    <p className="text-[10px] sm:text-xs font-medium line-clamp-2 mb-1 leading-tight break-words">
                       {post.content}
                     </p>
-                    <Badge variant="outline" className="text-[9px] sm:text-[10px] h-3 sm:h-4 px-1 sm:px-1.5">
+                    <Badge variant="outline" className="text-[8px] sm:text-[9px] h-3 sm:h-3.5 px-1 sm:px-1.5 font-medium">
                       {format(new Date(post.scheduled_time), 'HH:mm')}
                     </Badge>
                   </div>
@@ -278,10 +353,10 @@ export default function Calendar({
         key={`${hour}-${dayIdx}`}
         ref={setNodeRef}
         className={cn(
-          "min-h-[50px] sm:min-h-[60px] md:min-h-[70px] border-r border-border p-1 sm:p-1.5 transition-all duration-200",
+          "min-h-[50px] sm:min-h-[60px] md:min-h-[70px] border-r border-border p-1 sm:p-1.5 transition-all duration-300",
           dayIdx === 6 && "border-r-0",
-          isOver && "bg-primary/10 ring-2 ring-primary/50 shadow-inner",
-          "hover:bg-accent/40 hover:shadow-sm"
+          isOver && "bg-primary/15 ring-2 ring-primary/60 shadow-inner scale-[1.02]",
+          "hover:bg-accent/40 hover:shadow-md"
         )}
       >
         {postsForSlot.map((post) => (
@@ -291,16 +366,34 @@ export default function Calendar({
               e.stopPropagation()
               onPostClick && onPostClick(post)
             }}
-            className="mb-1 sm:mb-1.5 cursor-pointer hover:shadow-sm transition-all duration-150 border hover:border-foreground/20"
+            className="mb-1 sm:mb-1.5 cursor-pointer hover:shadow-md transition-all duration-200 border hover:border-foreground/30 active:scale-[0.98]"
           >
             <CardContent className="p-1 sm:p-1.5">
               <div className="flex items-center gap-1 sm:gap-1.5">
                 {post.platform === 'twitter' ? (
-                  <Twitter className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground shrink-0" />
+                  <svg
+                    role="img"
+                    viewBox="0 0 24 24"
+                    className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0"
+                    fill="currentColor"
+                    style={{ color: '#000000' }}
+                    preserveAspectRatio="xMidYMid meet"
+                  >
+                    <path d={simpleIcons.siX.path} />
+                  </svg>
                 ) : (
-                  <Linkedin className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground shrink-0" />
+                  <svg
+                    role="img"
+                    viewBox="0 0 24 24"
+                    className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0"
+                    fill="currentColor"
+                    style={{ color: '#0A66C2' }}
+                    preserveAspectRatio="xMidYMid meet"
+                  >
+                    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                  </svg>
                 )}
-                <span className="text-[10px] sm:text-xs line-clamp-1 flex-1">{post.content}</span>
+                <span className="text-[10px] sm:text-xs line-clamp-1 flex-1 break-words">{post.content}</span>
               </div>
             </CardContent>
           </Card>
@@ -331,8 +424,8 @@ export default function Calendar({
         <div
           ref={setNodeRef}
           className={cn(
-            "min-h-[80px] sm:min-h-[90px] md:min-h-[100px] p-3 sm:p-3.5 md:p-4 transition-all duration-200",
-            isOver && "bg-primary/10 ring-2 ring-primary/50"
+            "min-h-[80px] sm:min-h-[90px] md:min-h-[100px] p-3 sm:p-3.5 md:p-4 transition-all duration-300",
+            isOver && "bg-primary/15 ring-2 ring-primary/60 scale-[1.01]"
           )}
         >
           <div className="space-y-2 sm:space-y-3">
@@ -353,15 +446,33 @@ export default function Calendar({
                   <CardContent className="p-3 sm:p-4">
                     <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
                       {post.platform === 'twitter' ? (
-                        <Twitter className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground shrink-0" />
+                        <svg
+                          role="img"
+                          viewBox="0 0 24 24"
+                          className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0"
+                          fill="currentColor"
+                          style={{ color: '#000000' }}
+                          preserveAspectRatio="xMidYMid meet"
+                        >
+                          <path d={simpleIcons.siX.path} />
+                        </svg>
                       ) : (
-                        <Linkedin className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground shrink-0" />
+                        <svg
+                          role="img"
+                          viewBox="0 0 24 24"
+                          className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0"
+                          fill="currentColor"
+                          style={{ color: '#0A66C2' }}
+                          preserveAspectRatio="xMidYMid meet"
+                        >
+                          <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                        </svg>
                       )}
                       <Badge variant="outline" className="text-[10px] sm:text-xs font-medium">
                         {format(new Date(post.scheduled_time), 'HH:mm')}
                       </Badge>
                     </div>
-                    <p className="text-xs sm:text-sm leading-relaxed line-clamp-3">
+                    <p className="text-xs sm:text-sm leading-relaxed line-clamp-3 break-words">
                       {post.content}
                     </p>
                   </CardContent>
@@ -540,93 +651,170 @@ export default function Calendar({
 
       {view === VIEWS.LIST && (
         <div className="flex flex-col h-full overflow-hidden border rounded-lg bg-background">
-          {sortedPosts.length === 0 ? (
+          {/* Filters Section */}
+          <div className="flex-shrink-0 border-b border-border bg-muted/40 p-3 sm:p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              {/* Date Filter */}
+              <Select value={dateFilter} onValueChange={setDateFilter}>
+                <SelectTrigger className="h-9 text-xs sm:text-sm border-border bg-background hover:bg-muted/50 shadow-sm">
+                  <SelectValue placeholder="Date" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Dates</SelectItem>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="tomorrow">Tomorrow</SelectItem>
+                  <SelectItem value="next7days">Next 7 Days</SelectItem>
+                  <SelectItem value="upcoming">Upcoming</SelectItem>
+                  <SelectItem value="past">Past</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              {/* Platform Filter */}
+              <Select value={platformFilter} onValueChange={setPlatformFilter}>
+                <SelectTrigger className="h-9 text-xs sm:text-sm border-border bg-background hover:bg-muted/50 shadow-sm">
+                  <SelectValue placeholder="Platform" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Platforms</SelectItem>
+                  <SelectItem value="twitter">Twitter/X</SelectItem>
+                  <SelectItem value="linkedin">LinkedIn</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              {/* Search */}
+              <div className="relative sm:col-span-2 lg:col-span-2">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search content..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-9 pl-9 text-xs sm:text-sm border-border bg-background hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring shadow-sm"
+                />
+              </div>
+            </div>
+          </div>
+          
+          {filteredAndSortedPosts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center px-4">
               <div className="mb-4 p-3 rounded-full bg-muted/50">
                 <CalendarIcon className="h-8 w-8 text-muted-foreground" />
               </div>
               <h3 className="text-sm font-semibold mb-1">No scheduled posts</h3>
               <p className="text-xs text-muted-foreground mt-2 max-w-xs">
-                Schedule drafts from the sidebar to see them here
+                {searchQuery || dateFilter !== 'all' || platformFilter !== 'all' 
+                  ? 'No posts match your filters' 
+                  : 'Schedule drafts from the sidebar to see them here'}
               </p>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
-              <div className="divide-y divide-border">
-                {sortedPosts.map((post) => {
-                  const postDate = new Date(post.scheduled_time)
-                  const isPast = postDate < new Date()
-                  
-                  return (
-                    <Card
-                      key={post.id}
-                      onClick={() => onPostClick && onPostClick(post)}
-                      className={cn(
-                        "cursor-pointer hover:shadow-md transition-all duration-150 border-0 rounded-none border-b border-border hover:bg-accent/50",
-                        isPast && "opacity-60"
-                      )}
-                    >
-                      <CardContent className="p-4 sm:p-5">
-                        <div className="flex items-start gap-3 sm:gap-4">
-                          {/* Platform Icon */}
-                          <div className="flex-shrink-0 mt-0.5">
-                            {post.platform === 'twitter' ? (
-                              <Twitter className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-                            ) : (
-                              <Linkedin className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-                            )}
-                          </div>
-                          
-                          {/* Content */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 sm:gap-3 mb-2 flex-wrap">
-                              <Badge variant="outline" className="text-xs sm:text-sm font-medium">
-                                {format(postDate, 'MMM d, yyyy')}
-                              </Badge>
-                              <Badge variant="secondary" className="text-xs sm:text-sm font-medium">
+            <div className="flex flex-col h-full overflow-hidden">
+              {/* Table Header */}
+              <div className="sticky top-0 z-10 bg-muted/30 border-b border-border/50 flex-shrink-0">
+                <div className="grid grid-cols-[1.5fr_1.5fr_2fr] gap-3 sm:gap-4 px-4 sm:px-5 md:px-6 py-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <CalendarIcon className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <span className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Date & Time
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-start">
+                    <span className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Platform
+                    </span>
+                  </div>
+                  <div className="flex items-center">
+                    <span className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Content
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Table Body */}
+              <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
+                <div className="divide-y divide-border">
+                  {filteredAndSortedPosts.map((post) => {
+                    const postDate = new Date(post.scheduled_time)
+                    const isPast = postDate < new Date()
+                    const isToday = isSameDay(postDate, new Date())
+                    
+                    return (
+                      <div
+                        key={post.id}
+                        onClick={() => onPostClick && onPostClick(post)}
+                        className={cn(
+                          "grid grid-cols-[1.5fr_1.5fr_2fr] gap-3 sm:gap-4 px-4 sm:px-5 md:px-6 py-2.5 sm:py-3 cursor-pointer transition-all duration-150 hover:bg-accent/50 border-b border-border/50",
+                          isPast && "opacity-60"
+                        )}
+                      >
+                        {/* Date & Time Column */}
+                        <div className="flex items-center min-w-0">
+                          <div className="flex flex-col gap-0.5 min-w-0">
+                            <span className={cn(
+                              "text-xs sm:text-sm font-medium leading-tight",
+                              isToday && "text-primary font-semibold"
+                            )}>
+                              {isToday ? 'Today' : format(postDate, 'MMM d, yyyy')}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-3 w-3 text-muted-foreground shrink-0" />
+                              <span className="text-[10px] sm:text-xs text-muted-foreground">
                                 {format(postDate, 'HH:mm')}
-                              </Badge>
-                              {post.platform && (
-                                <Badge variant="outline" className="text-xs sm:text-sm">
-                                  {post.platform === 'twitter' ? 'Twitter/X' : 'LinkedIn'}
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              {(() => {
-                                // Try to get draft name if draft_id exists
-                                if (post.draft_id && drafts.length > 0) {
-                                  const draft = drafts.find(d => d.id === post.draft_id || String(d.id) === String(post.draft_id))
-                                  if (draft && draft.title) {
-                                    return (
-                                      <p className="text-xs sm:text-sm font-semibold text-foreground/80">
-                                        {draft.title}
-                                      </p>
-                                    )
-                                  }
-                                }
-                                return null
-                              })()}
-                              <p className="text-sm sm:text-base leading-relaxed line-clamp-3 text-foreground">
-                                {(() => {
-                                  // Try to get full content from draft if available
-                                  if (post.draft_id && drafts.length > 0) {
-                                    const draft = drafts.find(d => d.id === post.draft_id || String(d.id) === String(post.draft_id))
-                                    if (draft && draft.content) {
-                                      return draft.content
-                                    }
-                                  }
-                                  // Fall back to post content
-                                  return post.content || 'No content'
-                                })()}
-                              </p>
+                              </span>
                             </div>
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
+                        
+                        {/* Platform Column */}
+                        <div className="flex items-center justify-start">
+                          <div className="w-4 flex items-center justify-start">
+                            {post.platform === 'twitter' ? (
+                              <svg
+                                role="img"
+                                viewBox="0 0 24 24"
+                                className="h-4 w-4 shrink-0"
+                                fill="currentColor"
+                                style={{ color: '#000000' }}
+                                preserveAspectRatio="xMidYMid meet"
+                              >
+                                <path d={simpleIcons.siX.path} />
+                              </svg>
+                            ) : (
+                              <svg
+                                role="img"
+                                viewBox="0 0 24 24"
+                                className="h-4 w-4 shrink-0"
+                                fill="currentColor"
+                                style={{ color: '#0A66C2' }}
+                                preserveAspectRatio="xMidYMid meet"
+                              >
+                                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                              </svg>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Content Column */}
+                        <div className="min-w-0 flex items-center">
+                          <p className="text-xs sm:text-sm leading-relaxed line-clamp-2 text-foreground break-words">
+                            {(() => {
+                              // Try to get full content from draft if available
+                              if (post.draft_id && drafts.length > 0) {
+                                const draft = drafts.find(d => d.id === post.draft_id || String(d.id) === String(post.draft_id))
+                                if (draft && draft.content) {
+                                  return draft.content
+                                }
+                              }
+                              // Fall back to post content
+                              return post.content || 'No content'
+                            })()}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             </div>
           )}

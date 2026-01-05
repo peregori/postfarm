@@ -124,15 +124,7 @@ export default function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            {state === "expanded" ? (
-              <ServerStatus />
-            ) : (
-              <SidebarMenuButton size="lg" tooltip="AI Status">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-accent">
-                  <span className="text-xs">AI</span>
-                </div>
-              </SidebarMenuButton>
-            )}
+            <ServerStatus />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>

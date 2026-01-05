@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Calendar, Clock, Send, Twitter, Linkedin, CheckCircle, X, Trash2, Search, Plus, Sparkles } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
+import { Calendar, Clock, Send, Twitter, Linkedin, CheckCircle, X, Trash2, Search, Plus, Sparkles, Edit } from 'lucide-react'
 import { schedulerApi, platformsApi, draftsApi } from '../api/client'
 import useDraftStore from '../stores/draftStore'
 import { Button } from '@/components/ui/button'
@@ -50,6 +50,9 @@ export default function Schedule() {
   const drafts = useDraftStore((state) => state.drafts)
   const scheduleDraft = useDraftStore((state) => state.scheduleDraft)
   const unscheduleDraft = useDraftStore((state) => state.unscheduleDraft)
+  const updateDraft = useDraftStore((state) => state.updateDraft)
+  const selectDraft = useDraftStore((state) => state.selectDraft)
+  const navigate = useNavigate()
   const [selectedDraft, setSelectedDraft] = useState(null)
   const [scheduled, setScheduled] = useState([])
   const [platform, setPlatform] = useState('twitter')
@@ -60,6 +63,23 @@ export default function Schedule() {
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState('newest') // 'newest', 'oldest', 'alphabetical'
   const [error, setError] = useState(null)
+  // Track the last user-selected platform to persist across dialog opens/closes
+  const lastSelectedPlatformRef = useRef('twitter')
+
+  // Effect to set platform when selectedDraft changes and dialog is open
+  useEffect(() => {
+    if (selectedDraft && showScheduleDialog) {
+      const draftPlatform = getPlatformFromTags(selectedDraft.tags)
+      if (draftPlatform) {
+        // Draft has a confirmed platform - use it
+        setPlatform(draftPlatform)
+        lastSelectedPlatformRef.current = draftPlatform
+      } else {
+        // No platform tag in draft - restore the last user-selected platform
+        setPlatform(lastSelectedPlatformRef.current)
+      }
+    }
+  }, [selectedDraft, showScheduleDialog])
 
   useEffect(() => {
     let mounted = true
@@ -318,17 +338,13 @@ export default function Schedule() {
 
   const handleSelectDraft = (draft) => {
     setSelectedDraft(draft)
-    // Pre-fill platform if draft has one in tags
-    const draftPlatform = getPlatformFromTags(draft.tags)
-    if (draftPlatform) {
-      setPlatform(draftPlatform)
-    }
     // Pre-fill date/time with today and default time if not set
     if (!scheduledDate) {
       setScheduledDate(new Date().toISOString().split('T')[0])
       setScheduledTime('12:00')
     }
     setShowScheduleDialog(true)
+    // Platform will be set by useEffect when selectedDraft and showScheduleDialog change
   }
 
   const handleCancelScheduled = async (post) => {
@@ -357,6 +373,32 @@ export default function Schedule() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleEditDraft = () => {
+    if (!selectedDraft?.id) return
+
+    // Remove "confirmed" tag to send draft back to Inbox
+    const currentTags = selectedDraft.tags || []
+    const updatedTags = currentTags.filter(tag => tag !== 'confirmed')
+    
+    // Update the draft to unconfirm it
+    updateDraft(selectedDraft.id, {
+      tags: updatedTags,
+      confirmed: false
+    })
+    
+    // Select the draft in the store
+    selectDraft(selectedDraft.id)
+    
+    // Close the dialog
+    setShowScheduleDialog(false)
+    setSelectedDraft(null)
+    
+    // Navigate to Inbox for editing
+    navigate('/inbox')
+    
+    showToast.success('Draft Sent to Inbox', 'You can now edit the draft in the Inbox.')
   }
 
   const handleDraftDrop = async (draftId, date, time, autoSchedule = false) => {
@@ -389,7 +431,7 @@ export default function Schedule() {
         setSelectedDraft(draft)
         setScheduledDate(format(date, 'yyyy-MM-dd'))
         setScheduledTime(time || '12:00')
-        setPlatform('twitter')
+        setPlatform(lastSelectedPlatformRef.current) // Use last selected platform
         setShowScheduleDialog(true)
       } finally {
         setLoading(false)
@@ -399,12 +441,13 @@ export default function Schedule() {
       setSelectedDraft(draft)
       setScheduledDate(format(date, 'yyyy-MM-dd'))
       setScheduledTime(time || '12:00')
-      setPlatform('twitter') // default
+      setPlatform(lastSelectedPlatformRef.current) // Use last selected platform
       setShowScheduleDialog(true)
     }
   }
 
-  const handleDragEnd = (event) => {
+  const handleDragEndInternal = (event) => {
+    setActiveId(null)
     const { active, over } = event
     
     if (!over || !active) return
@@ -539,8 +582,162 @@ export default function Schedule() {
     )
   }
 
+  const [activeId, setActiveId] = useState(null)
+  const [isDraggingState, setIsDraggingState] = useState(false)
+  const dragJustEndedRef = useRef(false)
+
+  const handleDragStart = (event) => {
+    setActiveId(event.active.id)
+    setIsDraggingState(true)
+    dragJustEndedRef.current = false
+  }
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event
+    
+    // Always clear drag state first
+    setActiveId(null)
+    setIsDraggingState(false)
+    
+    // If no valid drop target, mark that drag just ended to prevent click
+    if (!over || !active) {
+      dragJustEndedRef.current = true
+      // Clear the flag after a short delay to allow normal clicks again
+      setTimeout(() => {
+        dragJustEndedRef.current = false
+      }, 100)
+      return
+    }
+
+    // Extract draft ID from active
+    const activeId = active.id.toString()
+    if (!activeId.startsWith('draft-')) {
+      return
+    }
+    
+    const draftId = activeId.replace('draft-', '') // UUID string, not integer
+    if (!draftId) {
+      return
+    }
+    
+    // Extract date and time from over (format: "timeslot-YYYY-MM-DD-HHMM" or "calendar-day-YYYY-MM-DD")
+    const overId = over.id.toString()
+    
+    // Prevent self-drops (dropping on the same element)
+    if (activeId === overId) {
+      dragJustEndedRef.current = true
+      setTimeout(() => {
+        dragJustEndedRef.current = false
+      }, 100)
+      return
+    }
+    
+    // If dropped on sidebar drop zone, treat as cancelled
+    if (overId === 'sidebar-drop-zone') {
+      dragJustEndedRef.current = true
+      setTimeout(() => {
+        dragJustEndedRef.current = false
+      }, 100)
+      return
+    }
+    
+    // If dropped on another draft (sidebar area), treat as cancelled
+    if (overId.startsWith('draft-')) {
+      dragJustEndedRef.current = true
+      setTimeout(() => {
+        dragJustEndedRef.current = false
+      }, 100)
+      return
+    }
+    
+    // Only process drops on valid calendar drop zones
+    // If dropped on sidebar or any other area, treat as cancelled
+    const isValidDropZone = overId.startsWith('timeslot-') || overId.startsWith('calendar-day-')
+    
+    if (!isValidDropZone) {
+      // Not a valid drop zone - treat as cancelled drag
+      dragJustEndedRef.current = true
+      setTimeout(() => {
+        dragJustEndedRef.current = false
+      }, 100)
+      return
+    }
+    
+    if (overId.startsWith('timeslot-')) {
+      // Dropped on a time slot - auto-schedule!
+      // Format: timeslot-2024-01-15-0900
+      const parts = overId.split('-')
+      if (parts.length >= 5) {
+        // parts[0] = "timeslot", parts[1] = YYYY, parts[2] = MM, parts[3] = DD, parts[4] = HHMM
+        const dateStr = `${parts[1]}-${parts[2]}-${parts[3]}` // YYYY-MM-DD
+        const timeStr = parts[4] || '1200' // HHMM (4 digits)
+        
+        // Validate date string
+        if (dateStr.length !== 10) {
+          console.error('Invalid date format:', dateStr)
+          setActiveId(null)
+          setIsDraggingState(false)
+          return
+        }
+        
+        const date = new Date(dateStr + 'T00:00:00') // Add time to ensure proper parsing
+        
+        if (isNaN(date.getTime())) {
+          console.error('Invalid date:', dateStr, 'parsed as:', date)
+          setActiveId(null)
+          setIsDraggingState(false)
+          return
+        }
+        
+        // Parse time: HHMM -> HH:MM
+        const hour = timeStr.substring(0, 2)
+        const minute = timeStr.substring(2, 4) || '00'
+        
+        // Validate hour and minute
+        const hourNum = parseInt(hour, 10)
+        const minuteNum = parseInt(minute, 10)
+        if (isNaN(hourNum) || hourNum < 0 || hourNum > 23 || isNaN(minuteNum) || minuteNum < 0 || minuteNum > 59) {
+          console.error('Invalid time format:', timeStr, 'parsed as hour:', hourNum, 'minute:', minuteNum)
+          showToast.error('Invalid Time Slot', 'Could not parse the time slot. Please try again.')
+          setActiveId(null)
+          setIsDraggingState(false)
+          return
+        }
+        
+        const time = `${hour}:${minute}`
+        handleDraftDrop(draftId, date, time, true) // autoSchedule = true
+      } else {
+        console.error('Invalid timeslot format:', overId, 'parts:', parts)
+        dragJustEndedRef.current = true
+        setTimeout(() => {
+          dragJustEndedRef.current = false
+        }, 100)
+      }
+    } else if (overId.startsWith('calendar-day-')) {
+      // Dropped on calendar day - open dialog for manual scheduling
+      // Format: calendar-day-2024-01-15
+      const dateStr = overId.replace('calendar-day-', '')
+      const date = new Date(dateStr)
+      
+      if (isNaN(date.getTime())) {
+        console.error('Invalid date:', dateStr)
+        dragJustEndedRef.current = true
+        setTimeout(() => {
+          dragJustEndedRef.current = false
+        }, 100)
+        return
+      }
+      
+      handleDraftDrop(draftId, date, '12:00', false) // autoSchedule = false
+    }
+  }
+
   return (
-    <DndContext onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
+    <DndContext 
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd} 
+      collisionDetection={closestCenter}
+    >
       <div className="flex flex-col h-full overflow-hidden">
         {/* Header */}
         <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -576,52 +773,56 @@ export default function Schedule() {
         {/* Main Content */}
         <div className="flex flex-1 overflow-hidden min-h-0">
           {/* Drafts Sidebar */}
-          <div className="w-64 border-r bg-muted/30 overflow-y-auto scrollbar-thin transition-all duration-200 min-h-0">
-            <div className="p-4">
-          
-          {filteredDrafts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-              <div className="mb-4 p-3 rounded-full bg-muted/50">
-                <Calendar className="h-8 w-8 text-muted-foreground" />
+          <SidebarDroppableWrapper>
+            <div className="w-64 sm:w-64 md:w-64 border-r bg-muted/30 flex flex-col h-full min-h-0 flex-shrink-0">
+              <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                <div className="p-4">
+                  {filteredDrafts.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+                      <div className="mb-4 p-3 rounded-full bg-muted/50">
+                        <Calendar className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                      <h3 className="text-sm font-semibold mb-1">
+                        {searchQuery ? 'No confirmed drafts found' : 'No confirmed drafts available'}
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-2 max-w-xs">
+                        {searchQuery ? 'Try a different search' : 'Confirm drafts in Inbox to schedule them'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {/* Sort Filter - Sticky at top */}
+                      <div className="sticky top-0 z-10 mb-3 pb-3 bg-muted/30 backdrop-blur-sm -mx-4 px-4 -mt-4 pt-4">
+                        <Select value={sortBy} onValueChange={setSortBy}>
+                          <SelectTrigger className="w-full h-8 text-xs border-muted/50 bg-background hover:bg-muted/40 focus:bg-background transition-all duration-200">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="newest">Newest First</SelectItem>
+                            <SelectItem value="oldest">Oldest First</SelectItem>
+                            <SelectItem value="alphabetical">Alphabetical</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {filteredDrafts.map((draft) => {
+                        const isSelected = selectedDraft?.id === draft.id
+                        
+                        return (
+                          <DraggableDraft
+                            key={draft.id}
+                            draft={draft}
+                            onClick={() => handleSelectDraft(draft)}
+                            isSelected={isSelected}
+                            dragJustEndedRef={dragJustEndedRef}
+                          />
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
-              <h3 className="text-sm font-semibold mb-1">
-                {searchQuery ? 'No confirmed drafts found' : 'No confirmed drafts available'}
-              </h3>
-              <p className="text-xs text-muted-foreground mt-2 max-w-xs">
-                {searchQuery ? 'Try a different search' : 'Confirm drafts in Inbox to schedule them'}
-              </p>
             </div>
-          ) : (
-            <div className="space-y-2">
-              {/* Sort Filter */}
-              <div className="mb-3">
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-full h-8 text-xs border-muted/50 bg-muted/20 hover:bg-muted/40 focus:bg-background transition-all duration-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="newest">Newest First</SelectItem>
-                    <SelectItem value="oldest">Oldest First</SelectItem>
-                    <SelectItem value="alphabetical">Alphabetical</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {filteredDrafts.map((draft) => {
-                const isSelected = selectedDraft?.id === draft.id
-                
-                return (
-                  <DraggableDraft
-                    key={draft.id}
-                    draft={draft}
-                    onClick={() => handleSelectDraft(draft)}
-                    isSelected={isSelected}
-                  />
-                )
-              })}
-            </div>
-          )}
-            </div>
-          </div>
+          </SidebarDroppableWrapper>
 
           {/* Calendar View */}
           <div className="flex-1 flex flex-col overflow-hidden">
@@ -656,7 +857,11 @@ export default function Schedule() {
                     setScheduledDate(format(scheduledDate, 'yyyy-MM-dd'))
                     setScheduledTime(format(scheduledDate, 'HH:mm'))
                   }
-                  setPlatform(post.platform || 'twitter')
+                  // Prioritize draft's platform tag if available, otherwise use post.platform
+                  const draftPlatform = getPlatformFromTags(draftToSelect.tags)
+                  const postPlatform = draftPlatform || post.platform || 'twitter'
+                  setPlatform(postPlatform)
+                  lastSelectedPlatformRef.current = postPlatform
                   setShowScheduleDialog(true)
                 }}
                 onDraftDrop={handleDraftDrop}
@@ -667,7 +872,19 @@ export default function Schedule() {
       </div>
 
       {/* Schedule Dialog */}
-      <Dialog open={showScheduleDialog} onOpenChange={setShowScheduleDialog}>
+      <Dialog 
+        open={showScheduleDialog} 
+        onOpenChange={(open) => {
+          setShowScheduleDialog(open)
+          // When dialog closes, preserve platform selection but reset other fields
+          if (!open) {
+            setSelectedDraft(null)
+            setScheduledDate('')
+            setScheduledTime('')
+            // Platform is preserved for next time
+          }
+        }}
+      >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Schedule Post</DialogTitle>
@@ -682,7 +899,10 @@ export default function Schedule() {
               <label className="block text-sm font-medium mb-2">Platform</label>
               <div className="flex items-center gap-0 bg-background/95 backdrop-blur-sm border rounded-full px-1.5 py-0.5 shadow-sm w-fit">
                 <button
-                  onClick={() => setPlatform('linkedin')}
+                  onClick={() => {
+                    setPlatform('linkedin')
+                    lastSelectedPlatformRef.current = 'linkedin'
+                  }}
                   className={cn(
                     "h-5 w-5 flex items-center justify-center rounded-full transition-all",
                     "hover:bg-muted/50"
@@ -702,7 +922,10 @@ export default function Schedule() {
                 </button>
                 <div className="h-3 w-px bg-border" />
                 <button
-                  onClick={() => setPlatform('twitter')}
+                  onClick={() => {
+                    setPlatform('twitter')
+                    lastSelectedPlatformRef.current = 'twitter'
+                  }}
                   className={cn(
                     "h-5 w-5 flex items-center justify-center rounded-full transition-all",
                     "hover:bg-muted/50"
@@ -815,50 +1038,143 @@ export default function Schedule() {
             )}
           </div>
 
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowScheduleDialog(false)
-                setSelectedDraft(null)
-              }}
-              disabled={loading}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="default"
-              onClick={handlePostNow}
-              disabled={loading || !selectedDraft?.content?.trim()}
-            >
-              <Send className="mr-2 h-4 w-4" />
-              Post Now
-            </Button>
-            <Button
-              onClick={handleSchedule}
-              disabled={loading || !selectedDraft?.content?.trim() || !scheduledDate || !scheduledTime}
-            >
-              {loading ? (
-                <>
-                  <Clock className="mr-2 h-4 w-4 animate-spin shrink-0" />
-                  Scheduling...
-                </>
-              ) : (
-                <>
-                  <Calendar className="mr-2 h-4 w-4 shrink-0" />
-                  Schedule
-                </>
+          <DialogFooter className="gap-2 sm:justify-between">
+            {/* Left side: Secondary actions */}
+            <div className="flex gap-2">
+              {(selectedDraft?.tags?.includes('confirmed') || (selectedDraft?.id && scheduled.some(s => s.id === selectedDraft.id))) && (
+                <Button
+                  variant="outline"
+                  onClick={handleEditDraft}
+                  disabled={loading}
+                >
+                  <Edit className="mr-2 h-4 w-4" />
+                  Send to Inbox
+                </Button>
               )}
-            </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowScheduleDialog(false)
+                  // Don't reset platform - preserve user's selection
+                  setSelectedDraft(null)
+                  setScheduledDate('')
+                  setScheduledTime('')
+                }}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+            </div>
+            
+            {/* Right side: Primary actions */}
+            <div className="flex gap-2">
+              <Button
+                variant="default"
+                onClick={handlePostNow}
+                disabled={loading || !selectedDraft?.content?.trim()}
+              >
+                <Send className="mr-2 h-4 w-4" />
+                Post Now
+              </Button>
+              <Button
+                onClick={handleSchedule}
+                disabled={loading || !selectedDraft?.content?.trim() || !scheduledDate || !scheduledTime}
+              >
+                {loading ? (
+                  <>
+                    <Clock className="mr-2 h-4 w-4 animate-spin shrink-0" />
+                    Scheduling...
+                  </>
+                ) : (
+                  <>
+                    <Calendar className="mr-2 h-4 w-4 shrink-0" />
+                    Schedule
+                  </>
+                )}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Drag Overlay - shows dragged item following cursor */}
+      <DragOverlay style={{ zIndex: 9999 }}>
+        {activeId ? (() => {
+          const draftId = activeId.toString().replace('draft-', '')
+          const draggedDraft = drafts.find(d => d.id === draftId)
+          if (!draggedDraft) return null
+          
+          const preview = getPreviewText(draggedDraft.content || '')
+          const hasPrompt = draggedDraft.prompt && draggedDraft.prompt.trim().length > 0
+          const draftPlatform = getPlatformFromTags(draggedDraft.tags)
+          
+          return (
+            <Card className="w-64 shadow-2xl border-2 border-primary/50 rotate-3 opacity-95 cursor-grabbing" style={{ willChange: 'transform' }}>
+              <CardContent className="p-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    {hasPrompt && (
+                      <Badge variant="secondary" className="h-3.5 px-1 text-[8px] gap-0.5 opacity-60">
+                        <Sparkles className="h-2 w-2" />
+                      </Badge>
+                    )}
+                    {draftPlatform && (
+                      <div className="flex items-center">
+                        {draftPlatform === 'twitter' ? (
+                          <svg
+                            role="img"
+                            viewBox="0 0 24 24"
+                            className="h-2.5 w-2.5 shrink-0"
+                            fill="currentColor"
+                            style={{ color: '#000000' }}
+                            preserveAspectRatio="xMidYMid meet"
+                          >
+                            <path d={simpleIcons.siX.path} />
+                          </svg>
+                        ) : draftPlatform === 'linkedin' ? (
+                          <svg
+                            role="img"
+                            viewBox="0 0 24 24"
+                            className="h-3 w-3 shrink-0"
+                            fill="currentColor"
+                            style={{ color: '#0A66C2' }}
+                            preserveAspectRatio="xMidYMid meet"
+                          >
+                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                          </svg>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground line-clamp-1 leading-snug font-medium">
+                  {preview || <span className="italic opacity-50">No content</span>}
+                </p>
+              </CardContent>
+            </Card>
+          )
+        })() : null}
+      </DragOverlay>
     </DndContext>
   )
 }
 
+// Sidebar Droppable Wrapper - catches drops to prevent calendar detection
+function SidebarDroppableWrapper({ children }) {
+  const { setNodeRef } = useDroppable({
+    id: 'sidebar-drop-zone',
+    data: { type: 'sidebar' },
+  })
+
+  return (
+    <div ref={setNodeRef} className="h-full flex flex-col min-w-0">
+      {children}
+    </div>
+  )
+}
+
 // Draggable Draft Component
-function DraggableDraft({ draft, onClick, isSelected }) {
+function DraggableDraft({ draft, onClick, isSelected, dragJustEndedRef }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `draft-${draft.id}`,
     data: draft,
@@ -866,6 +1182,7 @@ function DraggableDraft({ draft, onClick, isSelected }) {
 
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+    willChange: 'transform',
   } : undefined
 
   const preview = getPreviewText(draft.content || '')
@@ -895,16 +1212,28 @@ function DraggableDraft({ draft, onClick, isSelected }) {
   
   const timeAgo = formatDate(draft.created_at)
 
+  const handleClick = (e) => {
+    // Prevent click if drag just ended
+    if (dragJustEndedRef?.current) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+    onClick()
+  }
+
   return (
     <Card
       ref={setNodeRef}
       style={style}
       {...listeners}
       {...attributes}
-      onClick={onClick}
+      onClick={handleClick}
       className={cn(
-        "cursor-grab active:cursor-grabbing transition-all border-border/80 hover:border-border hover:shadow-sm",
-        isDragging && "opacity-50",
+        "cursor-grab active:cursor-grabbing border-border/80 hover:border-border hover:shadow-md hover:scale-[1.02]",
+        // Only apply transitions when not dragging for better performance
+        !isDragging && "transition-all duration-200",
+        isDragging && "opacity-30 scale-95 rotate-2 shadow-lg z-50",
         isSelected && "border-primary/80 shadow-sm bg-accent/50"
       )}
     >
