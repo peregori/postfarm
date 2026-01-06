@@ -84,10 +84,12 @@ export const schedulerApi = {
     return response.data
   },
   
-  calendar: async (startDate, endDate) => {
+  calendar: async (startDate, endDate, cacheBust = false) => {
     const params = {}
     if (startDate) params.start_date = startDate
     if (endDate) params.end_date = endDate
+    // Add cache-busting parameter if requested
+    if (cacheBust) params._t = Date.now()
     const response = await client.get('/scheduler/calendar', { params })
     return response.data
   },

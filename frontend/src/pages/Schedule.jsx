@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Calendar, Clock, Send, Twitter, Linkedin, CheckCircle, X, Trash2, Search, Plus, Sparkles, Edit } from 'lucide-react'
 import { schedulerApi, platformsApi, draftsApi } from '../api/client'
@@ -10,7 +11,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { showToast } from '@/lib/toast'
 import CalendarView from '@/components/Calendar'
-import { DndContext, useDraggable, useDroppable, DragOverlay, closestCenter } from '@dnd-kit/core'
+import { DndContext, useDraggable, useDroppable, DragOverlay, pointerWithin, closestCorners } from '@dnd-kit/core'
 import { getPreviewText } from '@/lib/contentCleaner'
 import * as simpleIcons from 'simple-icons'
 import {
@@ -123,12 +124,49 @@ export default function Schedule() {
 
   const loadScheduled = async () => {
     try {
-      const data = await schedulerApi.calendar()
+      // Add cache-busting timestamp to ensure we get fresh data
+      // Pass current timestamp to prevent caching
+      const data = await schedulerApi.calendar(undefined, undefined, true)
       const scheduledPosts = Object.values(data.calendar || {}).flat()
-      setScheduled(scheduledPosts)
+      console.log('loadScheduled - loaded posts:', scheduledPosts.length)
+      console.log('loadScheduled - posts:', scheduledPosts.map(p => ({ id: p.id, time: p.scheduled_time })))
+      
+      // Log the specific post we're looking for (Friday 9th)
+      const fridayPosts = scheduledPosts.filter(p => {
+        const postDate = new Date(p.scheduled_time)
+        return format(postDate, 'yyyy-MM-dd') === '2026-01-09'
+      })
+      console.log('Friday 9th posts after load:', fridayPosts.map(p => ({ id: p.id, time: p.scheduled_time, hour: new Date(p.scheduled_time).getHours() })))
+      
+      // Use functional update to ensure we're setting the latest state
+      setScheduled(prevScheduled => {
+        console.log('setScheduled called - prev count:', prevScheduled.length, 'new count:', scheduledPosts.length)
+        // Check if Friday 9th posts changed
+        const prevFriday = prevScheduled.filter(p => {
+          const postDate = new Date(p.scheduled_time)
+          return format(postDate, 'yyyy-MM-dd') === '2026-01-09'
+        })
+        const newFriday = scheduledPosts.filter(p => {
+          const postDate = new Date(p.scheduled_time)
+          return format(postDate, 'yyyy-MM-dd') === '2026-01-09'
+        })
+        console.log('Friday posts - prev:', prevFriday.map(p => ({ id: p.id, hour: new Date(p.scheduled_time).getHours() })))
+        console.log('Friday posts - new:', newFriday.map(p => ({ id: p.id, hour: new Date(p.scheduled_time).getHours() })))
+        return scheduledPosts
+      })
+      
+      // Increment key to force Calendar re-render
+      setCalendarKey(prev => {
+        const newKey = prev + 1
+        console.log('Calendar key updated to:', newKey)
+        return newKey
+      })
+      // Return the posts so callers can verify
+      return scheduledPosts
     } catch (error) {
       console.error('Failed to load scheduled:', error)
       // Don't throw - just log the error to prevent blank page
+      return []
     }
   }
 
@@ -263,13 +301,8 @@ export default function Schedule() {
         console.error('Error resetting state:', stateError)
       }
       
-      // Reload scheduled posts
-      try {
-        await loadScheduled()
-      } catch (loadError) {
-        console.error('Failed to reload scheduled posts:', loadError)
-        // Don't show error to user - they already got success message
-      }
+      // Reload scheduled posts - ensure this completes before continuing
+      await loadScheduled()
     } catch (error) {
       console.error('Failed to schedule post - Full error:', error)
       console.error('Error stack:', error?.stack)
@@ -423,7 +456,7 @@ export default function Schedule() {
         scheduleDraft(draft.id, scheduledDateTime)
         
         showToast.success('Post Scheduled', 'Post scheduled successfully!')
-        loadScheduled()
+        await loadScheduled()
       } catch (error) {
         console.error('Auto-schedule failed:', error)
         showToast.error('Schedule Failed', error.response?.data?.detail || 'Failed to schedule post.')
@@ -442,6 +475,209 @@ export default function Schedule() {
       setScheduledDate(format(date, 'yyyy-MM-dd'))
       setScheduledTime(time || '12:00')
       setPlatform(lastSelectedPlatformRef.current) // Use last selected platform
+      setShowScheduleDialog(true)
+    }
+  }
+
+  const handlePostReschedule = async (postId, date, time, autoSchedule = false) => {
+    const post = scheduled.find(s => s.id === postId)
+    if (!post) {
+      showToast.error('Post Not Found', 'Could not find the scheduled post.')
+      return
+    }
+
+    console.log('=== handlePostReschedule ===')
+    console.log('Post ID:', postId)
+    console.log('Received date:', date)
+    console.log('Received time:', time)
+    console.log('Formatted date:', format(date, 'yyyy-MM-dd'))
+    
+    // Create a Date object with the desired local time
+    const [hours, minutes] = (time || '12:00').split(':')
+    const localDateTime = new Date(date)
+    localDateTime.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0)
+    
+    // Send the time as-is in local timezone format
+    // The backend will interpret it as local time and convert to UTC for storage
+    // When we display it, we'll parse it correctly to show local time
+    const scheduledDateTime = `${format(localDateTime, 'yyyy-MM-dd')}T${String(localDateTime.getHours()).padStart(2, '0')}:${String(localDateTime.getMinutes()).padStart(2, '0')}:00`
+    
+    console.log('Final scheduledDateTime being sent to API:', scheduledDateTime)
+    console.log('Local time desired:', `${hours}:${minutes}`)
+    console.log('User timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone)
+    
+    // Validate that scheduled time is in the future
+    const scheduledDateObj = new Date(scheduledDateTime)
+    const now = new Date()
+    
+    if (scheduledDateObj <= now) {
+      showToast.error('Invalid Time', 'Scheduled time must be in the future.')
+      return
+    }
+
+    if (autoSchedule) {
+      // Auto-reschedule immediately
+      setLoading(true)
+      try {
+        // Cancel existing post
+        await schedulerApi.cancel(postId)
+        
+        // Find the draft for the post
+        let draftIdForApi = post.draft_id
+        if (!draftIdForApi) {
+          // Try to find draft from store
+          const draft = drafts.find(d => {
+            // Check if any scheduled post matches this draft
+            return scheduled.some(s => s.draft_id === d.id && s.id === postId)
+          })
+          if (draft) {
+            draftIdForApi = draft.id
+          }
+        }
+
+        if (!draftIdForApi) {
+          throw new Error('Cannot reschedule: draft ID is missing.')
+        }
+
+        // Convert UUID to integer if needed
+        let finalDraftId = draftIdForApi
+        if (typeof draftIdForApi === 'string' && draftIdForApi.includes('-')) {
+          // This is a UUID - need to create in backend or find existing
+          const existingDraft = drafts.find(d => d.id === draftIdForApi)
+          if (existingDraft) {
+            // Try to create or find in backend
+            try {
+              const createdDraft = await draftsApi.create({
+                title: existingDraft.title || null,
+                content: existingDraft.content,
+                tags: existingDraft.tags || [],
+              })
+              finalDraftId = createdDraft.id
+            } catch (createError) {
+              console.error('Failed to create draft in backend:', createError)
+              throw new Error('Failed to save draft to backend. Please try again.')
+            }
+          }
+        } else if (typeof draftIdForApi === 'string' && !isNaN(parseInt(draftIdForApi, 10))) {
+          finalDraftId = parseInt(draftIdForApi, 10)
+        }
+
+        // Create new scheduled post
+        // Send with user's timezone so backend converts correctly
+        const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+        console.log('About to call schedule API with:')
+        console.log('  - draft_id:', finalDraftId)
+        console.log('  - platform:', post.platform || 'twitter')
+        console.log('  - scheduled_time:', scheduledDateTime)
+        console.log('  - timezone:', userTimezone)
+        
+        const response = await schedulerApi.schedule({
+          draft_id: finalDraftId,
+          platform: post.platform || 'twitter',
+          content: post.content || '',
+          scheduled_time: scheduledDateTime,
+          timezone: userTimezone, // Send user's timezone so backend converts correctly
+        })
+
+        console.log('Schedule API response:', response)
+        console.log('New post ID:', response?.id, 'New post time:', response?.scheduled_time)
+        console.log('Expected time was:', scheduledDateTime)
+        if (response.scheduled_time !== scheduledDateTime) {
+          console.error('⚠️ MISMATCH: API returned different time than we sent!')
+          console.error('  Sent:', scheduledDateTime)
+          console.error('  Received:', response.scheduled_time)
+        }
+
+        // Update local draft state if applicable
+        if (post.draft_id && typeof post.draft_id === 'string' && post.draft_id.includes('-')) {
+          try {
+            scheduleDraft(post.draft_id, scheduledDateTime)
+          } catch (storeError) {
+            console.warn('Failed to update draft store:', storeError)
+          }
+        }
+
+        // Optimistically update the state immediately with the new post
+        if (response && response.id) {
+          console.log('API Response received:', response)
+          const newPost = {
+            id: response.id,
+            draft_id: response.draft_id || post.draft_id,
+            platform: response.platform || post.platform || 'twitter',
+            content: response.content || post.content || '',
+            scheduled_time: response.scheduled_time,
+            status: response.status || 'scheduled',
+          }
+          console.log('New post object:', newPost)
+          console.log('New post scheduled_time:', newPost.scheduled_time)
+          console.log('New post hour should be:', new Date(newPost.scheduled_time).getHours())
+          
+          // Use flushSync to force synchronous state updates
+          flushSync(() => {
+            // Update the state first
+            setScheduled(prevScheduled => {
+              // Remove the old post (by ID) and add the new one
+              const filtered = prevScheduled.filter(p => p.id !== postId)
+              const updated = [...filtered, newPost]
+              console.log('Optimistically updated scheduled state:')
+              console.log('  - Removed old post ID:', postId)
+              console.log('  - Added new post ID:', newPost.id, 'time:', newPost.scheduled_time)
+              console.log('  - Total posts now:', updated.length)
+              // Log Friday posts specifically
+              const fridayPosts = updated.filter(p => {
+                const postDate = new Date(p.scheduled_time)
+                return format(postDate, 'yyyy-MM-dd') === '2026-01-09'
+              })
+              console.log('  - Friday 9th posts in updated state:', fridayPosts.map(p => ({ id: p.id, time: p.scheduled_time, hour: new Date(p.scheduled_time).getHours() })))
+              return updated
+            })
+            
+            // Force Calendar re-render by incrementing key
+            setCalendarKey(prev => {
+              const newKey = prev + 1
+              console.log('Calendar key updated to:', newKey)
+              return newKey
+            })
+          })
+        } else {
+          console.warn('No response or response.id from schedule API:', response)
+        }
+
+        // Wait a bit for backend to process the update, then reload to sync
+        await new Promise(resolve => setTimeout(resolve, 300))
+        
+        const updatedPosts = await loadScheduled()
+        console.log('After loadScheduled - updated posts:', updatedPosts.length)
+        console.log('After loadScheduled - updated posts details:', updatedPosts.map(p => ({ id: p.id, time: p.scheduled_time })))
+        
+        // Verify the rescheduled post is in the results
+        const rescheduledPost = updatedPosts.find(p => {
+          const postDate = new Date(p.scheduled_time)
+          return format(postDate, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd') && 
+                 format(postDate, 'HH:mm') === time
+        })
+        console.log('Rescheduled post found in results:', rescheduledPost ? { id: rescheduledPost.id, time: rescheduledPost.scheduled_time } : 'NOT FOUND')
+        
+        showToast.success('Post Rescheduled', 'Post rescheduled successfully!')
+      } catch (error) {
+        console.error('Auto-reschedule failed:', error)
+        showToast.error('Reschedule Failed', error.response?.data?.detail || error.message || 'Failed to reschedule post.')
+        // Fall back to opening dialog on error
+        setSelectedDraft(post)
+        setScheduledDate(format(date, 'yyyy-MM-dd'))
+        setScheduledTime(time || '12:00')
+        setPlatform(post.platform || lastSelectedPlatformRef.current)
+        setShowScheduleDialog(true)
+      } finally {
+        setLoading(false)
+      }
+    } else {
+      // Open dialog for manual rescheduling
+      setSelectedDraft(post)
+      setScheduledDate(format(date, 'yyyy-MM-dd'))
+      setScheduledTime(time || '12:00')
+      setPlatform(post.platform || lastSelectedPlatformRef.current)
+      lastSelectedPlatformRef.current = post.platform || lastSelectedPlatformRef.current
       setShowScheduleDialog(true)
     }
   }
@@ -585,6 +821,7 @@ export default function Schedule() {
   const [activeId, setActiveId] = useState(null)
   const [isDraggingState, setIsDraggingState] = useState(false)
   const dragJustEndedRef = useRef(false)
+  const [calendarKey, setCalendarKey] = useState(0)
 
   const handleDragStart = (event) => {
     setActiveId(event.active.id)
@@ -609,19 +846,23 @@ export default function Schedule() {
       return
     }
 
-    // Extract draft ID from active
+    // Extract ID from active - can be draft or scheduled post
     const activeId = active.id.toString()
-    if (!activeId.startsWith('draft-')) {
-      return
-    }
+    const isDraft = activeId.startsWith('draft-')
+    const isScheduledPost = activeId.startsWith('scheduled-post-')
     
-    const draftId = activeId.replace('draft-', '') // UUID string, not integer
-    if (!draftId) {
+    if (!isDraft && !isScheduledPost) {
       return
     }
     
     // Extract date and time from over (format: "timeslot-YYYY-MM-DD-HHMM" or "calendar-day-YYYY-MM-DD")
-    const overId = over.id.toString()
+    let overId = over.id.toString()
+    
+    // Debug: Log what we detected
+    console.log('=== DRAG END DEBUG ===')
+    console.log('Active ID:', activeId)
+    console.log('Over ID:', overId)
+    console.log('Is Draft:', isDraft, 'Is Scheduled Post:', isScheduledPost)
     
     // Prevent self-drops (dropping on the same element)
     if (activeId === overId) {
@@ -650,6 +891,32 @@ export default function Schedule() {
       return
     }
     
+    // If dropped on a scheduled post, we need to find the actual timeslot container
+    // The pointerWithin detection should find the timeslot if dropping in empty space,
+    // but if dropping directly on the post card, we use the post's timeslot as fallback
+    // Only do this if we haven't already detected a timeslot
+    if (overId.startsWith('scheduled-post-') && !overId.startsWith('timeslot-')) {
+      const targetPostId = parseInt(overId.replace('scheduled-post-', ''), 10)
+      const targetPost = scheduled.find(s => s.id === targetPostId)
+      if (targetPost && targetPost.scheduled_time) {
+        // Extract the timeslot from the target post's scheduled time
+        const postDate = new Date(targetPost.scheduled_time)
+        const dateStr = format(postDate, 'yyyy-MM-dd')
+        const hour = postDate.getHours()
+        const minute = postDate.getMinutes()
+        const timeStr = `${String(hour).padStart(2, '0')}${String(minute).padStart(2, '0')}`
+        overId = `timeslot-${dateStr}-${timeStr}`
+        // Continue processing with the timeslot ID
+      } else {
+        // Can't find the post, treat as cancelled
+        dragJustEndedRef.current = true
+        setTimeout(() => {
+          dragJustEndedRef.current = false
+        }, 100)
+        return
+      }
+    }
+    
     // Only process drops on valid calendar drop zones
     // If dropped on sidebar or any other area, treat as cancelled
     const isValidDropZone = overId.startsWith('timeslot-') || overId.startsWith('calendar-day-')
@@ -663,14 +930,32 @@ export default function Schedule() {
       return
     }
     
+    // Helper function to parse timeslot and call appropriate handler
+    const handleTimeslotDrop = (date, time, autoSchedule) => {
+      if (isDraft) {
+        const draftId = activeId.replace('draft-', '')
+        if (draftId) {
+          handleDraftDrop(draftId, date, time, autoSchedule)
+        }
+      } else if (isScheduledPost) {
+        const postId = parseInt(activeId.replace('scheduled-post-', ''), 10)
+        if (postId) {
+          handlePostReschedule(postId, date, time, autoSchedule)
+        }
+      }
+    }
+    
     if (overId.startsWith('timeslot-')) {
-      // Dropped on a time slot - auto-schedule!
+      // Dropped on a time slot - auto-schedule/reschedule!
       // Format: timeslot-2024-01-15-0900
       const parts = overId.split('-')
       if (parts.length >= 5) {
         // parts[0] = "timeslot", parts[1] = YYYY, parts[2] = MM, parts[3] = DD, parts[4] = HHMM
         const dateStr = `${parts[1]}-${parts[2]}-${parts[3]}` // YYYY-MM-DD
         const timeStr = parts[4] || '1200' // HHMM (4 digits)
+        
+        // Debug: log the detected timeslot
+        console.log('Dropping on timeslot:', overId, 'timeStr:', timeStr, 'expected hour:', timeStr.substring(0, 2))
         
         // Validate date string
         if (dateStr.length !== 10) {
@@ -705,7 +990,17 @@ export default function Schedule() {
         }
         
         const time = `${hour}:${minute}`
-        handleDraftDrop(draftId, date, time, true) // autoSchedule = true
+        console.log('=== TIMESLOT PARSING ===')
+        console.log('Full overId:', overId)
+        console.log('Parts array:', parts)
+        console.log('Date string:', dateStr)
+        console.log('Time string (HHMM):', timeStr)
+        console.log('Hour string:', hour, 'Hour number:', hourNum)
+        console.log('Minute string:', minute, 'Minute number:', minuteNum)
+        console.log('Final time:', time)
+        console.log('Final date:', dateStr)
+        console.log('Will schedule to:', dateStr, time)
+        handleTimeslotDrop(date, time, true) // autoSchedule = true
       } else {
         console.error('Invalid timeslot format:', overId, 'parts:', parts)
         dragJustEndedRef.current = true
@@ -714,7 +1009,7 @@ export default function Schedule() {
         }, 100)
       }
     } else if (overId.startsWith('calendar-day-')) {
-      // Dropped on calendar day - open dialog for manual scheduling
+      // Dropped on calendar day - open dialog for manual scheduling/rescheduling
       // Format: calendar-day-2024-01-15
       const dateStr = overId.replace('calendar-day-', '')
       const date = new Date(dateStr)
@@ -728,7 +1023,7 @@ export default function Schedule() {
         return
       }
       
-      handleDraftDrop(draftId, date, '12:00', false) // autoSchedule = false
+      handleTimeslotDrop(date, '12:00', false) // autoSchedule = false
     }
   }
 
@@ -736,7 +1031,56 @@ export default function Schedule() {
     <DndContext 
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd} 
-      collisionDetection={closestCenter}
+      collisionDetection={(args) => {
+        // Use pointerWithin for precise pointer-based detection
+        const pointerCollisions = pointerWithin(args)
+        
+        // Filter to only timeslot and calendar-day droppables (ignore draggable post cards)
+        const droppableCollisions = pointerCollisions.filter(collision => {
+          const id = collision.id.toString()
+          return id.startsWith('timeslot-') || id.startsWith('calendar-day-')
+        })
+        
+        if (droppableCollisions.length > 0) {
+          // If multiple droppables found, prefer the one with the smallest area
+          // (most specific = the exact timeslot, not a parent container)
+          const sorted = droppableCollisions.sort((a, b) => {
+            const aRect = a.data?.droppableContainer?.rect
+            const bRect = b.data?.droppableContainer?.rect
+            if (!aRect || !bRect) return 0
+            const aArea = aRect.width * aRect.height
+            const bArea = bRect.width * bRect.height
+            // Prefer smaller area (more specific timeslot)
+            return aArea - bArea
+          })
+          
+          const selected = sorted[0]
+          const selectedId = selected.id.toString()
+          if (selectedId.startsWith('timeslot-')) {
+            const parts = selectedId.split('-')
+            if (parts.length >= 5) {
+              const hour = parts[4]?.substring(0, 2)
+              console.log('Collision detection selected timeslot:', selectedId, 'hour:', hour)
+            }
+          }
+          
+          return [selected]
+        }
+        
+        // If no droppable found with pointerWithin, try closestCorners
+        const cornerCollisions = closestCorners(args)
+        const droppableCornerCollisions = cornerCollisions.filter(collision => {
+          const id = collision.id.toString()
+          return id.startsWith('timeslot-') || id.startsWith('calendar-day-')
+        })
+        
+        if (droppableCornerCollisions.length > 0) {
+          return [droppableCornerCollisions[0]]
+        }
+        
+        // Return all collisions as fallback
+        return pointerCollisions.length > 0 ? pointerCollisions : cornerCollisions
+      }}
     >
       <div className="flex flex-col h-full overflow-hidden">
         {/* Header */}
@@ -828,6 +1172,7 @@ export default function Schedule() {
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="flex-1 overflow-hidden min-h-0 p-6">
               <CalendarView
+                key={`calendar-${calendarKey}`}
                 scheduledPosts={scheduled.map(s => ({ ...s, type: 'scheduled' }))}
                 drafts={drafts}
                 onDateClick={(date) => {
@@ -1100,27 +1445,80 @@ export default function Schedule() {
       {/* Drag Overlay - shows dragged item following cursor */}
       <DragOverlay style={{ zIndex: 9999 }}>
         {activeId ? (() => {
-          const draftId = activeId.toString().replace('draft-', '')
-          const draggedDraft = drafts.find(d => d.id === draftId)
-          if (!draggedDraft) return null
+          const activeIdStr = activeId.toString()
           
-          const preview = getPreviewText(draggedDraft.content || '')
-          const hasPrompt = draggedDraft.prompt && draggedDraft.prompt.trim().length > 0
-          const draftPlatform = getPlatformFromTags(draggedDraft.tags)
+          // Handle draft drag
+          if (activeIdStr.startsWith('draft-')) {
+            const draftId = activeIdStr.replace('draft-', '')
+            const draggedDraft = drafts.find(d => d.id === draftId)
+            if (!draggedDraft) return null
+            
+            const preview = getPreviewText(draggedDraft.content || '')
+            const hasPrompt = draggedDraft.prompt && draggedDraft.prompt.trim().length > 0
+            const draftPlatform = getPlatformFromTags(draggedDraft.tags)
+            
+            return (
+              <Card className="w-64 shadow-2xl border-2 border-primary/50 rotate-3 opacity-95 cursor-grabbing" style={{ willChange: 'transform' }}>
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-1.5">
+                      {hasPrompt && (
+                        <Badge variant="secondary" className="h-3.5 px-1 text-[8px] gap-0.5 opacity-60">
+                          <Sparkles className="h-2 w-2" />
+                        </Badge>
+                      )}
+                      {draftPlatform && (
+                        <div className="flex items-center">
+                          {draftPlatform === 'twitter' ? (
+                            <svg
+                              role="img"
+                              viewBox="0 0 24 24"
+                              className="h-2.5 w-2.5 shrink-0"
+                              fill="currentColor"
+                              style={{ color: '#000000' }}
+                              preserveAspectRatio="xMidYMid meet"
+                            >
+                              <path d={simpleIcons.siX.path} />
+                            </svg>
+                          ) : draftPlatform === 'linkedin' ? (
+                            <svg
+                              role="img"
+                              viewBox="0 0 24 24"
+                              className="h-3 w-3 shrink-0"
+                              fill="currentColor"
+                              style={{ color: '#0A66C2' }}
+                              preserveAspectRatio="xMidYMid meet"
+                            >
+                              <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                            </svg>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground line-clamp-1 leading-snug font-medium">
+                    {preview || <span className="italic opacity-50">No content</span>}
+                  </p>
+                </CardContent>
+              </Card>
+            )
+          }
           
-          return (
-            <Card className="w-64 shadow-2xl border-2 border-primary/50 rotate-3 opacity-95 cursor-grabbing" style={{ willChange: 'transform' }}>
-              <CardContent className="p-3">
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-1.5">
-                    {hasPrompt && (
-                      <Badge variant="secondary" className="h-3.5 px-1 text-[8px] gap-0.5 opacity-60">
-                        <Sparkles className="h-2 w-2" />
-                      </Badge>
-                    )}
-                    {draftPlatform && (
+          // Handle scheduled post drag
+          if (activeIdStr.startsWith('scheduled-post-')) {
+            const postId = parseInt(activeIdStr.replace('scheduled-post-', ''), 10)
+            const draggedPost = scheduled.find(s => s.id === postId)
+            if (!draggedPost) return null
+            
+            const preview = getPreviewText(draggedPost.content || '')
+            
+            return (
+              <Card className="w-64 shadow-2xl border-2 border-primary/50 rotate-3 opacity-95 cursor-grabbing" style={{ willChange: 'transform' }}>
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-1.5">
                       <div className="flex items-center">
-                        {draftPlatform === 'twitter' ? (
+                        {draggedPost.platform === 'twitter' ? (
                           <svg
                             role="img"
                             viewBox="0 0 24 24"
@@ -1131,7 +1529,7 @@ export default function Schedule() {
                           >
                             <path d={simpleIcons.siX.path} />
                           </svg>
-                        ) : draftPlatform === 'linkedin' ? (
+                        ) : draggedPost.platform === 'linkedin' ? (
                           <svg
                             role="img"
                             viewBox="0 0 24 24"
@@ -1144,15 +1542,20 @@ export default function Schedule() {
                           </svg>
                         ) : null}
                       </div>
-                    )}
+                      <Badge variant="outline" className="h-3.5 px-1 text-[8px]">
+                        {format(new Date(draggedPost.scheduled_time), 'HH:mm')}
+                      </Badge>
+                    </div>
                   </div>
-                </div>
-                <p className="text-xs text-muted-foreground line-clamp-1 leading-snug font-medium">
-                  {preview || <span className="italic opacity-50">No content</span>}
-                </p>
-              </CardContent>
-            </Card>
-          )
+                  <p className="text-xs text-muted-foreground line-clamp-1 leading-snug font-medium">
+                    {preview || <span className="italic opacity-50">No content</span>}
+                  </p>
+                </CardContent>
+              </Card>
+            )
+          }
+          
+          return null
         })() : null}
       </DragOverlay>
     </DndContext>

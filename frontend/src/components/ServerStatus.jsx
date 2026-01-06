@@ -108,21 +108,24 @@ export default function ServerStatus() {
   // Shared button style: dark fill with solid, noticeable border
   const buttonClassName = "bg-sidebar-accent/60 border-2 border-sidebar-border hover:bg-sidebar-accent hover:border-sidebar-accent-foreground/40 transition-colors text-sidebar-foreground"
 
-  // Collapsed state: show dot (same size as expanded)
+  // Collapsed state: show dot (same size as expanded) with AI label
   if (isCollapsed) {
     return (
-      <button
-        className={`h-8 w-8 rounded-md flex items-center justify-center ${buttonClassName} disabled:opacity-50 disabled:cursor-not-allowed`}
-        onClick={handleToggle}
-        disabled={actionLoading}
-        title={getStatusText()}
-      >
-        {actionLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin shrink-0 text-sidebar-foreground" />
-        ) : (
-          <div className={`h-2 w-2 rounded-full ${getStatusColor()}`} />
-        )}
-      </button>
+      <div className="flex flex-col items-center gap-1">
+        <span className="text-xs text-sidebar-foreground font-medium leading-none">AI</span>
+        <button
+          className={`h-8 w-8 rounded-md flex items-center justify-center ${buttonClassName} disabled:opacity-50 disabled:cursor-not-allowed`}
+          onClick={handleToggle}
+          disabled={actionLoading}
+          title={getStatusText()}
+        >
+          {actionLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin shrink-0 text-sidebar-foreground" />
+          ) : (
+            <div className={`h-2 w-2 rounded-full ${getStatusColor()}`} />
+          )}
+        </button>
+      </div>
     )
   }
 

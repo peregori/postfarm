@@ -59,7 +59,7 @@
 
 ---
 
-# **PHASE 3 — SCHEDULER (CORE MVP)** - DONE
+# **PHASE 3 — SCHEDULER (CORE MVP)** - TBF
 
 ### **6. Scheduler UI** - DONE
 
@@ -83,6 +83,13 @@
 * When confirming a draft in Inbox → optionally show "Schedule now?" - DONE
 
 ### **8. Interactions** - DONE
+
+TBF
+
+- on clicking confirmed posts: error page
+- on clciking scheduled posts over claendar, modal does not show
+- day view revamp
+
 
 * Drag draft card → drop onto a time slot - DONE
 * Or select a draft → click "Schedule" → modal to pick date/time - DONE
