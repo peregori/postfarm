@@ -86,9 +86,10 @@
 
 TBF
 
-- on clicking confirmed posts: error page
-- on clciking scheduled posts over claendar, modal does not show
-- day view revamp
+- on clicking confirmed posts in week view: error page
+on month view drag and drop not working, opens modal
+- on day view drag and drop reschedules but jumps you to todat
+- on clciking scheduled posts over claendar in many views, modal does not show
 
 
 * Drag draft card → drop onto a time slot - DONE

@@ -12,6 +12,7 @@ import {
   endOfWeek,
   addDays,
   getHours,
+  getMinutes,
   setHours,
   setMinutes,
 } from 'date-fns'
@@ -97,6 +98,178 @@ const VIEWS = {
   WEEK: 'week',
   DAY: 'day',
   LIST: 'list'
+}
+
+// Day View Event Card Component
+function DayViewEventCard({ post, top, height, onClick }) {
+  let postDate
+  const timeStr = post.scheduled_time
+  if (timeStr.includes('Z') || timeStr.match(/[+-]\d{2}:\d{2}$/)) {
+    postDate = new Date(timeStr)
+  } else {
+    postDate = new Date(timeStr + 'Z')
+  }
+  const timeDisplay = format(postDate, 'HH:mm')
+  
+  return (
+    <div
+      className={cn(
+        "w-full rounded-lg border cursor-pointer transition-all duration-200 overflow-hidden z-10 h-full",
+        "hover:shadow-sm active:scale-[0.98]",
+        post.platform === 'linkedin'
+          ? "bg-blue-50/50 dark:bg-blue-950/20 border-blue-200/60 dark:border-blue-800/40 hover:border-blue-400/60 dark:hover:border-blue-600/40"
+          : "bg-slate-100/70 dark:bg-slate-900/35 border-slate-300/75 dark:border-slate-700/55 hover:border-slate-500/75 dark:hover:border-slate-500/55"
+      )}
+      style={{ minHeight: '32px' }}
+      onClick={onClick}
+    >
+      <div className="p-1 sm:p-1.5 h-full flex flex-col gap-1">
+        {/* Top row: Checkmark + time on left, platform icon on right */}
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-1">
+            <Check className="h-2.5 w-2.5 text-muted-foreground/50" strokeWidth={2.5} />
+            <span className="text-[8px] sm:text-[9px] font-medium text-muted-foreground/70 leading-none">
+              {timeDisplay}
+            </span>
+          </div>
+          
+          {/* Platform Icon */}
+          <div className="shrink-0">
+            {post.platform === 'twitter' ? (
+              <svg
+                role="img"
+                viewBox="0 0 24 24"
+                className="h-3 w-3 shrink-0"
+                fill="currentColor"
+                style={{ color: '#000000' }}
+                preserveAspectRatio="xMidYMid meet"
+              >
+                <path d={simpleIcons.siX.path} />
+              </svg>
+            ) : (
+              <svg
+                role="img"
+                viewBox="0 0 24 24"
+                className="h-3 w-3 shrink-0"
+                fill="currentColor"
+                style={{ color: '#0A66C2' }}
+                preserveAspectRatio="xMidYMid meet"
+              >
+                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+              </svg>
+            )}
+          </div>
+        </div>
+        
+        {/* Bottom row: Content text */}
+        <p className="text-[10px] sm:text-[11px] font-medium text-foreground leading-tight break-words truncate">
+          {post.content}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// Day View Time Slot Component
+function DayViewTimeSlot({ hour, hourIdx, currentDate, platform, platformPosts, onPostClick, hours }) {
+  const slotId = `timeslot-${format(currentDate, 'yyyy-MM-dd')}-${String(hour).padStart(2, '0')}00`
+  const { setNodeRef, isOver } = useDroppable({
+    id: slotId,
+    data: { date: currentDate, hour },
+  })
+  
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "absolute left-0 right-0",
+        isOver && "bg-primary/5"
+      )}
+      style={{ 
+        top: `${hourIdx * 95}px`, 
+        height: '95px',
+        pointerEvents: 'auto'
+      }}
+    >
+      {/* Posts for this hour and platform */}
+      {(() => {
+        const postsInHour = platformPosts.filter(post => {
+          let postDate
+          const timeStr = post.scheduled_time
+          if (timeStr.includes('Z') || timeStr.match(/[+-]\d{2}:\d{2}$/)) {
+            postDate = new Date(timeStr)
+          } else {
+            postDate = new Date(timeStr + 'Z')
+          }
+          return getHours(postDate) === hour
+        })
+        
+        // Sort by minute to stack them properly
+        const sortedPosts = [...postsInHour].sort((a, b) => {
+          let dateA, dateB
+          const timeStrA = a.scheduled_time
+          const timeStrB = b.scheduled_time
+          if (timeStrA.includes('Z') || timeStrA.match(/[+-]\d{2}:\d{2}$/)) {
+            dateA = new Date(timeStrA)
+          } else {
+            dateA = new Date(timeStrA + 'Z')
+          }
+          if (timeStrB.includes('Z') || timeStrB.match(/[+-]\d{2}:\d{2}$/)) {
+            dateB = new Date(timeStrB)
+          } else {
+            dateB = new Date(timeStrB + 'Z')
+          }
+          return getMinutes(dateA) - getMinutes(dateB)
+        })
+        
+        return sortedPosts.map((post, index) => {
+          let postDate
+          const timeStr = post.scheduled_time
+          if (timeStr.includes('Z') || timeStr.match(/[+-]\d{2}:\d{2}$/)) {
+            postDate = new Date(timeStr)
+          } else {
+            postDate = new Date(timeStr + 'Z')
+          }
+          
+          const postMinute = getMinutes(postDate)
+          // Calculate position: each hour is 95px
+          // Stack cards vertically with consistent spacing (same as grid padding = 4px)
+          const cardHeight = 40 // Height per card
+          const spacing = 4 // Spacing between cards (matches py-1 = 4px)
+          const gridPadding = 4 // Top padding from grid (matches py-1 = 4px)
+          // Position: start from top padding, then stack cards with spacing
+          const topOffset = gridPadding + (index * (cardHeight + spacing))
+          
+          return (
+            <div
+              key={post.id}
+              className="absolute left-0 right-0 px-1"
+              style={{ top: `${topOffset}px`, height: `${cardHeight}px` }}
+            >
+              <DraggableScheduledPost
+                post={post}
+                variant="day"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onPostClick && onPostClick(post)
+                }}
+              >
+                <DayViewEventCard
+                  post={post}
+                  top={0}
+                  height={cardHeight}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onPostClick && onPostClick(post)
+                  }}
+                />
+              </DraggableScheduledPost>
+            </div>
+          )
+        })
+      })()}
+    </div>
+  )
 }
 
 export default function Calendar({ 
@@ -193,6 +366,22 @@ export default function Calendar({
       return isSameDay(postDate, date) && getHours(postDate) === hour
     })
   }, [scheduledPosts])
+
+  // Get posts for day view grouped by platform
+  const getPostsForDateByPlatform = useCallback((date) => {
+    const dayPosts = getPostsForDate(date)
+    const grouped = {
+      twitter: [],
+      linkedin: []
+    }
+    dayPosts.forEach(post => {
+      const platform = post.platform || 'twitter'
+      if (platform === 'twitter' || platform === 'linkedin') {
+        grouped[platform].push(post)
+      }
+    })
+    return grouped
+  }, [getPostsForDate])
 
   // Filter and sort scheduled posts for List View
   const filteredAndSortedPosts = useMemo(() => {
@@ -570,33 +759,91 @@ export default function Calendar({
       )}
 
       {view === VIEWS.DAY && (
-        <div className="flex flex-col h-full overflow-hidden border border-b-0 rounded-t-lg bg-background">
-          <div className="sticky top-0 z-10 border-b border-border bg-muted/50 flex-shrink-0">
-            <div className={cn(
-              "p-4 sm:p-5 md:p-6 text-center transition-colors duration-200",
-              isToday(currentDate) && "bg-primary/10"
-            )}>
-              <div className={cn(
-                "text-xs font-medium text-muted-foreground mb-1",
-                isToday(currentDate) && "text-primary"
-              )}>
-                {format(currentDate, 'EEEE')}
-              </div>
-              <div className={cn(
-                "text-2xl sm:text-3xl font-bold",
-                isToday(currentDate) && "text-primary"
-              )}>
-                {format(currentDate, 'd')}
-              </div>
-              <div className="text-xs sm:text-sm text-muted-foreground mt-1">
-                {format(currentDate, 'MMMM yyyy')}
-              </div>
+        <div className="flex flex-col h-full overflow-hidden border rounded-lg bg-background">
+          {/* Day View Content with Timeline and Platform Columns */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+            {/* Header Row - Sticky */}
+            <div className="sticky top-0 z-10 grid grid-cols-[70px_repeat(2,1fr)] border-b border-border bg-muted/50">
+              <div className="h-10 border-r border-border bg-muted/30 flex-shrink-0"></div>
+              {['twitter', 'linkedin'].map((platform) => (
+                <div key={platform} className="h-10 border-r last:border-r-0 border-border flex items-center gap-2 px-2.5">
+                  {platform === 'twitter' ? (
+                      <svg
+                        role="img"
+                        viewBox="0 0 24 24"
+                        className="h-4 w-4"
+                        fill="currentColor"
+                        style={{ color: '#000000' }}
+                      >
+                        <path d={simpleIcons.siX.path} />
+                      </svg>
+                    ) : (
+                      <svg
+                        role="img"
+                        viewBox="0 0 24 24"
+                        className="h-4 w-4"
+                        fill="currentColor"
+                        style={{ color: '#0A66C2' }}
+                      >
+                      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                    </svg>
+                  )}
+                  <span className="text-xs font-medium text-foreground">
+                    {platform === 'twitter' ? 'Twitter/X' : 'LinkedIn'}
+                  </span>
+                </div>
+              ))}
             </div>
-          </div>
-          <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0 border-b rounded-b-lg">
-            {hours.map((hour, hourIdx) => (
-              <DayTimeSlot key={hour} hour={hour} isLast={hourIdx === hours.length - 1} />
-            ))}
+
+            {/* Grid Content */}
+            <div className="grid grid-cols-[70px_repeat(2,1fr)] relative" style={{ height: `${hours.length * 95}px` }}>
+              {/* Hour lines extending across all columns */}
+              {hours.map((hour, hourIdx) => (
+                <div 
+                  key={hour} 
+                  className="absolute left-0 right-0 border-b border-border pointer-events-none" 
+                  style={{ top: `${hourIdx * 95}px`, zIndex: 1 }}
+                >
+                </div>
+              ))}
+
+              {/* Timeline Column */}
+              <div className="border-r border-border bg-muted/30 relative z-0">
+                {hours.map((hour, hourIdx) => (
+                  <div 
+                    key={hour} 
+                    className="absolute left-0 right-0 flex items-center justify-end pr-2 pointer-events-none" 
+                    style={{ top: `${hourIdx * 95}px`, height: '95px', zIndex: 2 }}
+                  >
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {format(setMinutes(setHours(new Date(), hour), 0), 'HH:mm')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Platform Columns */}
+              {['twitter', 'linkedin'].map((platform) => {
+                const platformPosts = getPostsForDateByPlatform(currentDate)[platform] || []
+                return (
+                  <div key={platform} className="border-r last:border-r-0 border-border relative z-0">
+                    {/* Droppable zones for each hour */}
+                    {hours.map((hour, hourIdx) => (
+                      <DayViewTimeSlot
+                        key={hour}
+                        hour={hour}
+                        hourIdx={hourIdx}
+                        currentDate={currentDate}
+                        platform={platform}
+                        platformPosts={platformPosts}
+                        onPostClick={onPostClick}
+                        hours={hours}
+                      />
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -662,8 +909,8 @@ export default function Calendar({
           ) : (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               {/* Table Header */}
-              <div className="sticky top-0 z-10 bg-muted/30 border-b border-border/50 flex-shrink-0">
-                <div className="grid grid-cols-[1.5fr_1.5fr_2fr] gap-3 sm:gap-4 px-4 sm:px-5 md:px-6 py-1.5">
+              <div className="sticky top-0 z-10 bg-background/95 backdrop-blur support-[backdrop-filter]:bg-background/60 border-b border-border/50 flex-shrink-0">
+                <div className="grid grid-cols-[1.5fr_1.5fr_2fr] gap-3 sm:gap-4 px-3 sm:px-4 md:px-5 py-1.5">
                   <div className="flex items-center gap-1.5">
                     <CalendarIcon className="h-3 w-3 text-muted-foreground shrink-0" />
                     <span className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide">
@@ -684,8 +931,8 @@ export default function Calendar({
               </div>
               
               {/* Table Body */}
-              <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
-                <div className="divide-y divide-border">
+              <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0 py-2 bg-muted/30">
+                <div className="flex flex-col gap-1.5 px-3 sm:px-4 md:px-5">
                   {filteredAndSortedPosts.map((post) => {
                     // Parse scheduled_time correctly - if no timezone, treat as UTC (backend stores in UTC)
                     let postDate
@@ -708,10 +955,15 @@ export default function Calendar({
                       >
                         <div
                           className={cn(
-                            "grid grid-cols-[1.5fr_1.5fr_2fr] gap-3 sm:gap-4 px-4 sm:px-5 md:px-6 py-1.5 sm:py-2 cursor-pointer transition-all duration-150 hover:bg-accent/50 border-b border-border/50",
+                            "rounded-lg border cursor-pointer transition-all duration-150 overflow-hidden",
+                            "hover:shadow-sm active:scale-[0.98]",
+                            post.platform === 'linkedin'
+                              ? "bg-blue-50/50 dark:bg-blue-950/20 border-blue-200/60 dark:border-blue-800/40 hover:border-blue-400/60 dark:hover:border-blue-600/40"
+                              : "bg-slate-100/70 dark:bg-slate-900/35 border-slate-300/75 dark:border-slate-700/55 hover:border-slate-500/75 dark:hover:border-slate-500/55",
                             isPast && "opacity-60"
                           )}
                         >
+                        <div className="grid grid-cols-[1.5fr_1.5fr_2fr] gap-3 sm:gap-4 py-1.5 px-3 sm:px-4 md:px-5 -ml-px">
                         {/* Date & Time Column */}
                         <div className="flex items-center min-w-0">
                           <div className="flex flex-col gap-0 min-w-0">
@@ -775,7 +1027,8 @@ export default function Calendar({
                             })()}
                           </p>
                         </div>
-                      </div>
+                        </div>
+                        </div>
                       </DraggableScheduledPost>
                     )
                   })}
@@ -841,9 +1094,9 @@ function ScheduledPostCard({ post, variant = 'default', itemCount = 1, onClick }
       className={cn(
         "rounded-lg border cursor-pointer transition-all duration-200 overflow-hidden",
         "hover:shadow-sm active:scale-[0.98]",
-        post.platform === 'twitter' 
-          ? "bg-slate-100/60 dark:bg-slate-900/30 border-slate-300/70 dark:border-slate-700/50 hover:border-slate-500/70 dark:hover:border-slate-500/50" 
-          : "bg-blue-50/50 dark:bg-blue-950/20 border-blue-200/60 dark:border-blue-800/40 hover:border-blue-400/60 dark:hover:border-blue-600/40",
+        post.platform === 'linkedin'
+          ? "bg-blue-50/50 dark:bg-blue-950/20 border-blue-200/60 dark:border-blue-800/40 hover:border-blue-400/60 dark:hover:border-blue-600/40"
+          : "bg-slate-100/70 dark:bg-slate-900/35 border-slate-300/75 dark:border-slate-700/55 hover:border-slate-500/75 dark:hover:border-slate-500/55",
         isCompact && "mb-1 last:mb-0"
       )}
       onClick={handleClick}
