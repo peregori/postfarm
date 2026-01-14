@@ -59,7 +59,7 @@
 
 ---
 
-# **PHASE 3 — SCHEDULER (CORE MVP)** - TBF
+# **PHASE 3 — SCHEDULER (CORE MVP)** - DONE
 
 ### **6. Scheduler UI** - DONE
 
@@ -83,14 +83,6 @@
 * When confirming a draft in Inbox → optionally show "Schedule now?" - DONE
 
 ### **8. Interactions** - DONE
-
-TBF
-
-- on clicking confirmed posts in week view: error page
-on month view drag and drop not working, opens modal
-- on day view drag and drop reschedules but jumps you to todat
-- on clciking scheduled posts over claendar in many views, modal does not show
-
 
 * Drag draft card → drop onto a time slot - DONE
 * Or select a draft → click "Schedule" → modal to pick date/time - DONE

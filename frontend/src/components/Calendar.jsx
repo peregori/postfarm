@@ -170,8 +170,46 @@ function DayViewEventCard({ post, top, height, onClick }) {
   )
 }
 
-// Day View Time Slot Component
-function DayViewTimeSlot({ hour, hourIdx, currentDate, platform, platformPosts, onPostClick, hours }) {
+// Simple Day View Slot Component (for responsive grid layout)
+function DayViewSlotSimple({ slotId, platform, posts, isLast, onPostClick, hour, currentDate, dragJustEndedRef, draggedItemsRef }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: slotId,
+    data: { date: currentDate, hour },
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "h-full min-h-[50px] border-r border-border p-1 relative transition-all duration-200 overflow-y-auto",
+        isLast && "border-r-0",
+        isOver && "bg-primary/10 ring-1 ring-primary/40",
+        "hover:bg-muted/30"
+      )}
+      style={{ pointerEvents: 'auto' }}
+    >
+      <div className="space-y-1">
+        {posts.map((post) => (
+          <DraggableScheduledPost
+            key={post.id}
+            post={post}
+            variant="day"
+            itemCount={posts.length}
+            dragJustEndedRef={dragJustEndedRef}
+            draggedItemsRef={draggedItemsRef}
+            onClick={(e) => {
+              e.stopPropagation()
+              onPostClick && onPostClick(post)
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Day View Time Slot Component (legacy - for absolute positioning)
+function DayViewTimeSlot({ hour, hourIdx, currentDate, platform, platformPosts, onPostClick, hours, dragJustEndedRef }) {
   const slotId = `timeslot-${format(currentDate, 'yyyy-MM-dd')}-${String(hour).padStart(2, '0')}00`
   const { setNodeRef, isOver } = useDroppable({
     id: slotId,
@@ -249,6 +287,8 @@ function DayViewTimeSlot({ hour, hourIdx, currentDate, platform, platformPosts, 
               <DraggableScheduledPost
                 post={post}
                 variant="day"
+                dragJustEndedRef={dragJustEndedRef}
+                draggedItemsRef={draggedItemsRef}
                 onClick={(e) => {
                   e.stopPropagation()
                   onPostClick && onPostClick(post)
@@ -278,9 +318,59 @@ export default function Calendar({
   onPostClick, 
   onDraftDrop,
   defaultTimeRange = { start: 8, end: 20 },
-  drafts = [] // Optional: pass drafts to show draft names in List view
+  drafts = [], // Optional: pass drafts to show draft names in List view
+  currentDate: currentDateProp, // Optional: controlled date from parent
+  onDateChange, // Optional: callback when date changes
+  dragJustEndedRef, // Optional: ref to track if drag just ended
+  onViewChange, // Optional: callback when view changes
+  draggedItemsRef // Optional: ref to track which items are being dragged
 }) {
-  const [currentDate, setCurrentDate] = useState(new Date())
+  // Use internal state for date - don't use controlled mode to avoid errors
+  const [currentDate, setCurrentDateState] = useState(() => new Date())
+  
+  // Sync with prop if provided (but don't make it fully controlled to avoid re-render issues)
+  useEffect(() => {
+    if (currentDateProp !== undefined && currentDateProp instanceof Date && !isNaN(currentDateProp.getTime())) {
+      const propTime = currentDateProp.getTime()
+      const currentTime = currentDate.getTime()
+      // Sync if different (use a smaller threshold to allow same-day updates)
+      // This allows preserving the date after rescheduling in day view
+      if (Math.abs(propTime - currentTime) > 1000) { // More than 1 second difference
+        setCurrentDateState(new Date(currentDateProp.getTime()))
+      }
+    }
+  }, [currentDateProp]) // Only depend on prop, not currentDate to avoid loops
+  
+  const setCurrentDate = useCallback((date) => {
+    try {
+      // Ensure date is a valid Date object
+      let validDate
+      if (date instanceof Date) {
+        validDate = date
+      } else {
+        validDate = new Date(date)
+      }
+      
+      if (isNaN(validDate.getTime())) {
+        console.error('Invalid date in setCurrentDate:', date)
+        return
+      }
+      
+      // Always update internal state
+      setCurrentDateState(validDate)
+      
+      // Optionally notify parent (but don't make it required)
+      if (onDateChange) {
+        try {
+          onDateChange(validDate)
+        } catch (error) {
+          console.error('Error in onDateChange callback:', error)
+        }
+      }
+    } catch (error) {
+      console.error('Error in setCurrentDate:', error)
+    }
+  }, [onDateChange])
   // Use localStorage to persist view state across re-renders
   const [view, setView] = useState(() => {
     const savedView = localStorage.getItem('calendar-view')
@@ -290,8 +380,13 @@ export default function Calendar({
   
   // Save view to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem('calendar-view', view)
-  }, [view])
+    try {
+      localStorage.setItem('calendar-view', view)
+      onViewChange?.(view)
+    } catch (error) {
+      console.error('Error saving view to localStorage:', error)
+    }
+  }, [view, onViewChange])
   
   // Debug: Log when scheduledPosts prop changes
   useEffect(() => {
@@ -312,21 +407,61 @@ export default function Calendar({
 
   // Memoize calculations
   const { days, weekDays } = useMemo(() => {
-    const monthStart = startOfMonth(currentDate)
-    const monthEnd = endOfMonth(currentDate)
-    const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 }) // Monday = 1
-    const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
-    const monthDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd })
+    try {
+      // Validate currentDate before using it
+      if (!currentDate || isNaN(currentDate.getTime())) {
+        console.error('Invalid currentDate in useMemo:', currentDate)
+        const today = new Date()
+        const monthStart = startOfMonth(today)
+        const monthEnd = endOfMonth(today)
+        const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 })
+        const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
+        const monthDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd })
+        const weekStart = startOfWeek(today, { weekStartsOn: 1 })
+        const weekDaysArray = eachDayOfInterval({ 
+          start: weekStart, 
+          end: addDays(weekStart, 6) 
+        })
+        return {
+          days: monthDays,
+          weekDays: weekDaysArray
+        }
+      }
+      
+      const monthStart = startOfMonth(currentDate)
+      const monthEnd = endOfMonth(currentDate)
+      const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 }) // Monday = 1
+      const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
+      const monthDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd })
 
-    const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
-    const weekDaysArray = eachDayOfInterval({ 
-      start: weekStart, 
-      end: addDays(weekStart, 6) 
-    })
+      const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
+      const weekDaysArray = eachDayOfInterval({ 
+        start: weekStart, 
+        end: addDays(weekStart, 6) 
+      })
 
-    return {
-      days: monthDays,
-      weekDays: weekDaysArray
+      return {
+        days: monthDays,
+        weekDays: weekDaysArray
+      }
+    } catch (error) {
+      console.error('Error in useMemo for days/weekDays:', error)
+      // Return safe defaults
+      const today = new Date()
+      const monthStart = startOfMonth(today)
+      const monthEnd = endOfMonth(today)
+      const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 })
+      const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
+      const monthDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd })
+      const weekStart = startOfWeek(today, { weekStartsOn: 1 })
+      const weekDaysArray = eachDayOfInterval({ 
+        start: weekStart, 
+        end: addDays(weekStart, 6) 
+      })
+      return {
+        days: monthDays,
+        weekDays: weekDaysArray
+      }
     }
   }, [currentDate])
 
@@ -435,30 +570,97 @@ export default function Calendar({
     })
   }, [scheduledPosts, dateFilter, platformFilter, searchQuery])
 
-  const handlePrevious = () => {
-    if (view === VIEWS.MONTH) {
-      setCurrentDate(subMonths(currentDate, 1))
-    } else if (view === VIEWS.WEEK) {
-      setCurrentDate(addDays(currentDate, -7))
-    } else if (view === VIEWS.DAY) {
-      setCurrentDate(addDays(currentDate, -1))
+  const handlePrevious = (e) => {
+    e?.preventDefault()
+    e?.stopPropagation()
+    try {
+      if (!currentDate || !(currentDate instanceof Date) || isNaN(currentDate.getTime())) {
+        console.error('Invalid currentDate in handlePrevious:', currentDate)
+        // Fallback to today
+        const today = new Date()
+        setCurrentDate(today)
+        return
+      }
+      let newDate
+      if (view === VIEWS.MONTH) {
+        newDate = subMonths(currentDate, 1)
+      } else if (view === VIEWS.WEEK) {
+        newDate = addDays(currentDate, -7)
+      } else if (view === VIEWS.DAY) {
+        newDate = addDays(currentDate, -1)
+      } else {
+        return // List view doesn't need navigation
+      }
+      
+      // Validate the new date before setting it
+      if (newDate instanceof Date && !isNaN(newDate.getTime())) {
+        setCurrentDate(newDate)
+      } else {
+        console.error('Invalid date calculated in handlePrevious:', newDate)
+      }
+    } catch (error) {
+      console.error('Error in handlePrevious:', error)
+      // Fallback to today on error
+      try {
+        setCurrentDate(new Date())
+      } catch (fallbackError) {
+        console.error('Error in handlePrevious fallback:', fallbackError)
+      }
     }
-    // List view doesn't need navigation
   }
 
-  const handleNext = () => {
-    if (view === VIEWS.MONTH) {
-      setCurrentDate(addMonths(currentDate, 1))
-    } else if (view === VIEWS.WEEK) {
-      setCurrentDate(addDays(currentDate, 7))
-    } else if (view === VIEWS.DAY) {
-      setCurrentDate(addDays(currentDate, 1))
+  const handleNext = (e) => {
+    e?.preventDefault()
+    e?.stopPropagation()
+    try {
+      if (!currentDate || !(currentDate instanceof Date) || isNaN(currentDate.getTime())) {
+        console.error('Invalid currentDate in handleNext:', currentDate)
+        // Fallback to today
+        const today = new Date()
+        setCurrentDate(today)
+        return
+      }
+      let newDate
+      if (view === VIEWS.MONTH) {
+        newDate = addMonths(currentDate, 1)
+      } else if (view === VIEWS.WEEK) {
+        newDate = addDays(currentDate, 7)
+      } else if (view === VIEWS.DAY) {
+        newDate = addDays(currentDate, 1)
+      } else {
+        return // List view doesn't need navigation
+      }
+      
+      // Validate the new date before setting it
+      if (newDate instanceof Date && !isNaN(newDate.getTime())) {
+        setCurrentDate(newDate)
+      } else {
+        console.error('Invalid date calculated in handleNext:', newDate)
+      }
+    } catch (error) {
+      console.error('Error in handleNext:', error)
+      // Fallback to today on error
+      try {
+        setCurrentDate(new Date())
+      } catch (fallbackError) {
+        console.error('Error in handleNext fallback:', fallbackError)
+      }
     }
-    // List view doesn't need navigation
   }
 
-  const handleToday = () => {
-    setCurrentDate(new Date())
+  const handleToday = (e) => {
+    e?.preventDefault()
+    e?.stopPropagation()
+    try {
+      const today = new Date()
+      if (!isNaN(today.getTime())) {
+        setCurrentDate(today)
+      } else {
+        console.error('Invalid today date:', today)
+      }
+    } catch (error) {
+      console.error('Error in handleToday:', error)
+    }
   }
 
   const weekDayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -497,14 +699,14 @@ export default function Calendar({
       <div
         ref={combinedRef}
         className={cn(
-          "min-h-[80px] sm:min-h-[100px] md:min-h-[120px] border-b border-r last:border-r-0 p-1.5 sm:p-2 md:p-2.5 cursor-pointer transition-all duration-300",
+          "h-full min-h-[80px] border-b border-r last:border-r-0 p-1.5 sm:p-2 md:p-2.5 cursor-pointer transition-all duration-300 flex flex-col overflow-hidden",
           !isCurrentMonth && "bg-muted/10 text-muted-foreground",
           isOver && "bg-primary/15 ring-2 ring-primary/60 shadow-lg scale-[1.02]",
           "hover:bg-accent/50 hover:shadow-md"
         )}
         onClick={() => onDateClick && onDateClick(day)}
       >
-        <div className="text-[10px] sm:text-xs font-semibold mb-0.5 sm:mb-1">
+        <div className="text-[10px] sm:text-xs font-semibold mb-0.5 sm:mb-1 flex-shrink-0">
           <span className={cn(
             "inline-flex items-center justify-start min-w-0 h-4 sm:h-5",
             isCurrentDay 
@@ -514,13 +716,15 @@ export default function Calendar({
             {format(day, 'd')}
           </span>
         </div>
-        <div className="space-y-1 sm:space-y-1.5">
+        <div className="flex-1 space-y-1 sm:space-y-1.5 overflow-y-auto scrollbar-thin">
           {visiblePosts.map((post) => (
             <DraggableScheduledPost
               key={post.id}
               post={post}
               variant="month"
               itemCount={visiblePosts.length}
+              dragJustEndedRef={dragJustEndedRef}
+              draggedItemsRef={draggedItemsRef}
               onClick={(e) => {
                 e.stopPropagation()
                 onPostClick && onPostClick(post)
@@ -552,7 +756,7 @@ export default function Calendar({
         key={`${hour}-${dayIdx}`}
         ref={setNodeRef}
         className={cn(
-          "min-h-[50px] border-r border-border p-1 relative transition-all duration-200 overflow-hidden",
+          "h-full min-h-[40px] border-r border-border p-1 relative transition-all duration-200 overflow-hidden",
           dayIdx === 6 && "border-r-0",
           isOver && "bg-primary/10 ring-1 ring-primary/40",
           "hover:bg-muted/30"
@@ -565,6 +769,8 @@ export default function Calendar({
             post={post}
             variant="week"
             itemCount={postsForSlot.length}
+            dragJustEndedRef={dragJustEndedRef}
+            draggedItemsRef={draggedItemsRef}
             onClick={(e) => {
               e.stopPropagation()
               onPostClick && onPostClick(post)
@@ -614,6 +820,8 @@ export default function Calendar({
                   post={post}
                   variant="day"
                   itemCount={postsForSlot.length}
+                  dragJustEndedRef={dragJustEndedRef}
+                  draggedItemsRef={draggedItemsRef}
                   onClick={(e) => {
                     e.stopPropagation()
                     onPostClick && onPostClick(post)
@@ -692,7 +900,7 @@ export default function Calendar({
               </div>
             ))}
           </div>
-          <div className="flex-1 overflow-y-auto scrollbar-thin grid grid-cols-7 bg-background auto-rows-min min-h-0 transition-all duration-200">
+          <div className="flex-1 grid grid-cols-7 bg-background auto-rows-[1fr] min-h-0 transition-all duration-200 overflow-hidden">
             {days.map((day, idx) => (
               <MonthDayCell key={idx} day={day} idx={idx} />
             ))}
@@ -734,10 +942,10 @@ export default function Calendar({
               )
             })}
           </div>
-          <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
+          <div className="flex-1 grid min-h-0 overflow-hidden" style={{ gridTemplateRows: `repeat(${hours.length}, minmax(40px, 1fr))` }}>
             {hours.map((hour, hourIdx) => (
               <div key={hour} className={cn(
-                "grid grid-cols-[50px_repeat(7,1fr)] border-b border-border",
+                "grid grid-cols-[50px_repeat(7,1fr)] border-b border-border min-h-0",
                 hourIdx === hours.length - 1 && "border-b-0"
               )}>
                 <div className="p-1.5 text-[10px] font-medium text-muted-foreground/70 border-r border-border bg-muted/20 flex items-center justify-end pr-2">
@@ -760,90 +968,87 @@ export default function Calendar({
 
       {view === VIEWS.DAY && (
         <div className="flex flex-col h-full overflow-hidden border rounded-lg bg-background">
-          {/* Day View Content with Timeline and Platform Columns */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
-            {/* Header Row - Sticky */}
-            <div className="sticky top-0 z-10 grid grid-cols-[70px_repeat(2,1fr)] border-b border-border bg-muted/50">
-              <div className="h-10 border-r border-border bg-muted/30 flex-shrink-0"></div>
-              {['twitter', 'linkedin'].map((platform) => (
-                <div key={platform} className="h-10 border-r last:border-r-0 border-border flex items-center gap-2 px-2.5">
-                  {platform === 'twitter' ? (
-                      <svg
-                        role="img"
-                        viewBox="0 0 24 24"
-                        className="h-4 w-4"
-                        fill="currentColor"
-                        style={{ color: '#000000' }}
-                      >
-                        <path d={simpleIcons.siX.path} />
-                      </svg>
-                    ) : (
-                      <svg
-                        role="img"
-                        viewBox="0 0 24 24"
-                        className="h-4 w-4"
-                        fill="currentColor"
-                        style={{ color: '#0A66C2' }}
-                      >
-                      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+          {/* Header Row */}
+          <div className="grid grid-cols-[70px_repeat(2,1fr)] border-b border-border bg-muted/50 flex-shrink-0">
+            <div className="h-10 border-r border-border bg-muted/30 flex-shrink-0"></div>
+            {['twitter', 'linkedin'].map((platform) => (
+              <div key={platform} className="h-10 border-r last:border-r-0 border-border flex items-center gap-2 px-2.5">
+                {platform === 'twitter' ? (
+                    <svg
+                      role="img"
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4"
+                      fill="currentColor"
+                      style={{ color: '#000000' }}
+                    >
+                      <path d={simpleIcons.siX.path} />
                     </svg>
-                  )}
-                  <span className="text-xs font-medium text-foreground">
-                    {platform === 'twitter' ? 'Twitter/X' : 'LinkedIn'}
+                  ) : (
+                    <svg
+                      role="img"
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4"
+                      fill="currentColor"
+                      style={{ color: '#0A66C2' }}
+                    >
+                    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                  </svg>
+                )}
+                <span className="text-xs font-medium text-foreground">
+                  {platform === 'twitter' ? 'Twitter/X' : 'LinkedIn'}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Grid Content - fills remaining space */}
+          <div 
+            className="flex-1 grid min-h-0 overflow-hidden" 
+            style={{ gridTemplateRows: `repeat(${hours.length}, minmax(50px, 1fr))` }}
+          >
+            {hours.map((hour, hourIdx) => (
+              <div key={hour} className={cn(
+                "grid grid-cols-[70px_repeat(2,1fr)] border-b border-border min-h-0",
+                hourIdx === hours.length - 1 && "border-b-0"
+              )}>
+                {/* Time label */}
+                <div className="border-r border-border bg-muted/30 flex items-center justify-end pr-2">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {format(setMinutes(setHours(new Date(), hour), 0), 'HH:mm')}
                   </span>
                 </div>
-              ))}
-            </div>
-
-            {/* Grid Content */}
-            <div className="grid grid-cols-[70px_repeat(2,1fr)] relative" style={{ height: `${hours.length * 95}px` }}>
-              {/* Hour lines extending across all columns */}
-              {hours.map((hour, hourIdx) => (
-                <div 
-                  key={hour} 
-                  className="absolute left-0 right-0 border-b border-border pointer-events-none" 
-                  style={{ top: `${hourIdx * 95}px`, zIndex: 1 }}
-                >
-                </div>
-              ))}
-
-              {/* Timeline Column */}
-              <div className="border-r border-border bg-muted/30 relative z-0">
-                {hours.map((hour, hourIdx) => (
-                  <div 
-                    key={hour} 
-                    className="absolute left-0 right-0 flex items-center justify-end pr-2 pointer-events-none" 
-                    style={{ top: `${hourIdx * 95}px`, height: '95px', zIndex: 2 }}
-                  >
-                    <span className="text-xs font-medium text-muted-foreground">
-                      {format(setMinutes(setHours(new Date(), hour), 0), 'HH:mm')}
-                    </span>
-                  </div>
-                ))}
+                {/* Platform columns */}
+                {['twitter', 'linkedin'].map((platform, platformIdx) => {
+                  const platformPosts = getPostsForDateByPlatform(currentDate)[platform] || []
+                  const postsInHour = platformPosts.filter(post => {
+                    let postDate
+                    const timeStr = post.scheduled_time
+                    if (timeStr.includes('Z') || timeStr.match(/[+-]\d{2}:\d{2}$/)) {
+                      postDate = new Date(timeStr)
+                    } else {
+                      postDate = new Date(timeStr + 'Z')
+                    }
+                    return getHours(postDate) === hour
+                  })
+                  const slotId = `timeslot-${format(currentDate, 'yyyy-MM-dd')}-${String(hour).padStart(2, '0')}00`
+                  
+                  return (
+                    <DayViewSlotSimple
+                      key={platform}
+                      slotId={slotId}
+                      platform={platform}
+                      posts={postsInHour}
+                      isLast={platformIdx === 1}
+                      onPostClick={onPostClick}
+                      hour={hour}
+                      currentDate={currentDate}
+                      dragJustEndedRef={dragJustEndedRef}
+                      draggedItemsRef={draggedItemsRef}
+                    />
+                  )
+                })}
               </div>
-
-              {/* Platform Columns */}
-              {['twitter', 'linkedin'].map((platform) => {
-                const platformPosts = getPostsForDateByPlatform(currentDate)[platform] || []
-                return (
-                  <div key={platform} className="border-r last:border-r-0 border-border relative z-0">
-                    {/* Droppable zones for each hour */}
-                    {hours.map((hour, hourIdx) => (
-                      <DayViewTimeSlot
-                        key={hour}
-                        hour={hour}
-                        hourIdx={hourIdx}
-                        currentDate={currentDate}
-                        platform={platform}
-                        platformPosts={platformPosts}
-                        onPostClick={onPostClick}
-                        hours={hours}
-                      />
-                    ))}
-                  </div>
-                )
-              })}
-            </div>
+            ))}
           </div>
         </div>
       )}
@@ -951,6 +1156,8 @@ export default function Calendar({
                       <DraggableScheduledPost
                         key={post.id}
                         post={post}
+                        dragJustEndedRef={dragJustEndedRef}
+                        draggedItemsRef={draggedItemsRef}
                         onClick={() => onPostClick && onPostClick(post)}
                       >
                         <div
@@ -1058,6 +1265,7 @@ function ScheduledPostCard({ post, variant = 'default', itemCount = 1, onClick }
   
   // Determine size based on variant and item count
   const isCompact = variant === 'month' || variant === 'week' || itemCount > 2
+  const isMonth = variant === 'month'
   const isList = variant === 'list'
   
   if (isList) {
@@ -1065,7 +1273,9 @@ function ScheduledPostCard({ post, variant = 'default', itemCount = 1, onClick }
     return null
   }
 
-  const cardPadding = isCompact 
+  const cardPadding = isMonth
+    ? 'p-1 sm:p-1.5'
+    : isCompact 
     ? 'p-1 sm:p-1.5' 
     : 'p-1.5 sm:p-2'
   const checkmarkSize = isCompact 
@@ -1080,7 +1290,9 @@ function ScheduledPostCard({ post, variant = 'default', itemCount = 1, onClick }
   const timeSize = isCompact 
     ? 'text-[8px] sm:text-[9px]' 
     : 'text-[9px] sm:text-[10px]'
-  const rowGap = isCompact 
+  const rowGap = isMonth
+    ? 'gap-0.5'
+    : isCompact 
     ? 'gap-1' 
     : 'gap-1 sm:gap-1.5'
 
@@ -1097,7 +1309,8 @@ function ScheduledPostCard({ post, variant = 'default', itemCount = 1, onClick }
         post.platform === 'linkedin'
           ? "bg-blue-50/50 dark:bg-blue-950/20 border-blue-200/60 dark:border-blue-800/40 hover:border-blue-400/60 dark:hover:border-blue-600/40"
           : "bg-slate-100/70 dark:bg-slate-900/35 border-slate-300/75 dark:border-slate-700/55 hover:border-slate-500/75 dark:hover:border-slate-500/55",
-        isCompact && "mb-1 last:mb-0"
+        isMonth && "mb-0.5 last:mb-0 w-full",
+        isCompact && !isMonth && "mb-1 last:mb-0"
       )}
       onClick={handleClick}
     >
@@ -1152,10 +1365,14 @@ function ScheduledPostCard({ post, variant = 'default', itemCount = 1, onClick }
 }
 
 // Draggable Scheduled Post Component
-function DraggableScheduledPost({ post, children, onClick, variant, itemCount }) {
+function DraggableScheduledPost({ post, children, onClick, variant, itemCount, dragJustEndedRef, draggedItemsRef }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `scheduled-post-${post.id}`,
     data: { post, type: 'scheduled' },
+    // Require 5px movement before drag activates - allows clicks to fire first
+    activationConstraint: {
+      distance: 5,
+    },
   })
 
   const style = transform ? {
@@ -1163,9 +1380,59 @@ function DraggableScheduledPost({ post, children, onClick, variant, itemCount })
     willChange: 'transform',
   } : undefined
 
+  const postId = `scheduled-post-${post.id}`
+  
+  // Check if this item was dragged
+  const wasDragged = draggedItemsRef?.current?.has(postId) || false
+
+  // Track mouse position to distinguish clicks from drags (same pattern as DraggableDraft)
+  const mouseDownPosRef = useRef(null)
+  const hasMovedRef = useRef(false)
+  const dragStartedRef = useRef(false)
+
+  const handleMouseDown = (e) => {
+    mouseDownPosRef.current = { x: e.clientX, y: e.clientY }
+    hasMovedRef.current = false
+    dragStartedRef.current = false
+  }
+
+  const handleMouseMove = (e) => {
+    if (mouseDownPosRef.current && !dragStartedRef.current) {
+      const deltaX = Math.abs(e.clientX - mouseDownPosRef.current.x)
+      const deltaY = Math.abs(e.clientY - mouseDownPosRef.current.y)
+      // If mouse moved more than 5px, consider it a drag
+      if (deltaX > 5 || deltaY > 5) {
+        hasMovedRef.current = true
+        dragStartedRef.current = true
+      }
+    }
+  }
+
   const handleClick = (e) => {
-    e?.stopPropagation()
+    // Prevent click if drag just ended
+    if (dragJustEndedRef?.current) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+
+    // If mouse moved significantly or drag started, it was a drag, not a click
+    if (hasMovedRef.current || dragStartedRef.current || isDragging || wasDragged) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+
     onClick?.(e)
+  }
+
+  const handleMouseUp = () => {
+    // Small delay to check if it was a click before clearing
+    setTimeout(() => {
+      mouseDownPosRef.current = null
+      hasMovedRef.current = false
+      dragStartedRef.current = false
+    }, 100)
   }
 
   return (
@@ -1174,17 +1441,22 @@ function DraggableScheduledPost({ post, children, onClick, variant, itemCount })
       style={style}
       {...listeners}
       {...attributes}
+      onClick={handleClick}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
       className={cn(
         "cursor-grab active:cursor-grabbing",
+        variant === 'month' && "w-full",
         isDragging && "opacity-50 z-50"
       )}
     >
       {children ? (
-        <div onClick={handleClick}>
+        <div className={variant === 'month' ? "w-full" : ""}>
           {children}
         </div>
       ) : (
-        <ScheduledPostCard post={post} variant={variant} itemCount={itemCount} onClick={handleClick} />
+        <ScheduledPostCard post={post} variant={variant} itemCount={itemCount} />
       )}
     </div>
   )

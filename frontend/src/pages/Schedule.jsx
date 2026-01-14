@@ -11,7 +11,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { showToast } from '@/lib/toast'
 import CalendarView from '@/components/Calendar'
-import { DndContext, useDraggable, useDroppable, DragOverlay, pointerWithin, closestCorners } from '@dnd-kit/core'
+import { DndContext, useDraggable, useDroppable, DragOverlay, pointerWithin, closestCorners, useSensor, useSensors, PointerSensor } from '@dnd-kit/core'
 import { getPreviewText } from '@/lib/contentCleaner'
 import * as simpleIcons from 'simple-icons'
 import {
@@ -53,6 +53,7 @@ export default function Schedule() {
   const unscheduleDraft = useDraftStore((state) => state.unscheduleDraft)
   const updateDraft = useDraftStore((state) => state.updateDraft)
   const selectDraft = useDraftStore((state) => state.selectDraft)
+  const deleteDraft = useDraftStore((state) => state.deleteDraft)
   const navigate = useNavigate()
   const [selectedDraft, setSelectedDraft] = useState(null)
   const [scheduled, setScheduled] = useState([])
@@ -434,6 +435,49 @@ export default function Schedule() {
     showToast.success('Draft Sent to Inbox', 'You can now edit the draft in the Inbox.')
   }
 
+  const handleDelete = async () => {
+    if (!selectedDraft) return
+
+    // Check if it's a scheduled post
+    const scheduledPost = scheduled.find(s => {
+      // Check if selectedDraft is actually a scheduled post object
+      if (s.id && selectedDraft.id && s.id === selectedDraft.id) {
+        return true
+      }
+      // Check if selectedDraft has a draft_id that matches a scheduled post
+      if (s.draft_id && selectedDraft.id && (s.draft_id === selectedDraft.id || String(s.draft_id) === String(selectedDraft.id))) {
+        return true
+      }
+      // Check if selectedDraft's id matches a scheduled post's draft_id
+      if (selectedDraft.id && s.draft_id && (selectedDraft.id === s.draft_id || String(selectedDraft.id) === String(s.draft_id))) {
+        return true
+      }
+      return false
+    })
+
+    if (scheduledPost && scheduledPost.id) {
+      // It's a scheduled post - cancel it (handleCancelScheduled has its own confirmation)
+      await handleCancelScheduled(scheduledPost)
+    } else {
+      // It's a draft - delete it
+      if (!window.confirm('Are you sure you want to delete this draft? This action cannot be undone.')) {
+        return
+      }
+
+      try {
+        deleteDraft(selectedDraft.id)
+        showToast.success('Draft Deleted', 'Draft deleted successfully.')
+        setShowScheduleDialog(false)
+        setSelectedDraft(null)
+        setScheduledDate('')
+        setScheduledTime('')
+      } catch (error) {
+        console.error('Delete failed:', error)
+        showToast.error('Delete Failed', 'Failed to delete draft.')
+      }
+    }
+  }
+
   const handleDraftDrop = async (draftId, date, time, autoSchedule = false) => {
     const draft = drafts.find(d => d.id === draftId)
     if (!draft) return
@@ -658,6 +702,13 @@ export default function Schedule() {
         })
         console.log('Rescheduled post found in results:', rescheduledPost ? { id: rescheduledPost.id, time: rescheduledPost.scheduled_time } : 'NOT FOUND')
         
+        // Preserve the current date after rescheduling (don't jump to today)
+        // If we're in day view, stay on the date where the post was rescheduled
+        if (calendarView === 'day' && date instanceof Date && !isNaN(date.getTime())) {
+          // Update the calendar date to the rescheduled date
+          setCalendarCurrentDate(new Date(date.getTime()))
+        }
+        
         showToast.success('Post Rescheduled', 'Post rescheduled successfully!')
       } catch (error) {
         console.error('Auto-reschedule failed:', error)
@@ -822,8 +873,24 @@ export default function Schedule() {
   const [isDraggingState, setIsDraggingState] = useState(false)
   const dragJustEndedRef = useRef(false)
   const [calendarKey, setCalendarKey] = useState(0)
+  const [calendarCurrentDate, setCalendarCurrentDate] = useState(new Date())
+  const [calendarView, setCalendarView] = useState('month')
+  // Track which items have started dragging to prevent clicks
+  const draggedItemsRef = useRef(new Set())
+
+  // Configure sensors with distance activation constraint
+  // This requires 8px movement before drag starts, allowing clicks to work
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // 8px movement required before drag activates
+      },
+    })
+  )
 
   const handleDragStart = (event) => {
+    const itemId = event.active.id.toString()
+    draggedItemsRef.current.add(itemId)
     setActiveId(event.active.id)
     setIsDraggingState(true)
     dragJustEndedRef.current = false
@@ -831,6 +898,14 @@ export default function Schedule() {
 
   const handleDragEnd = (event) => {
     const { active, over } = event
+    
+    // Remove from dragged items set - clear after a delay to prevent immediate clicks
+    if (active) {
+      const itemId = active.id.toString()
+      setTimeout(() => {
+        draggedItemsRef.current.delete(itemId)
+      }, 300) // Clear after 300ms to prevent clicks right after drag
+    }
     
     // Always clear drag state first
     setActiveId(null)
@@ -842,7 +917,7 @@ export default function Schedule() {
       // Clear the flag after a short delay to allow normal clicks again
       setTimeout(() => {
         dragJustEndedRef.current = false
-      }, 100)
+      }, 200)
       return
     }
 
@@ -1009,8 +1084,7 @@ export default function Schedule() {
         }, 100)
       }
     } else if (overId.startsWith('calendar-day-')) {
-      // Dropped on calendar day - open dialog for manual scheduling/rescheduling
-      // Format: calendar-day-2024-01-15
+      // Dropped on calendar day - format: calendar-day-2024-01-15
       const dateStr = overId.replace('calendar-day-', '')
       const date = new Date(dateStr)
       
@@ -1023,12 +1097,21 @@ export default function Schedule() {
         return
       }
       
-      handleTimeslotDrop(date, '12:00', false) // autoSchedule = false
+      // For month view: if it's a scheduled post being dragged, auto-reschedule to the dropped day
+      // For other views or drafts: open dialog
+      if (isScheduledPost && calendarView === 'month') {
+        // Auto-reschedule to the dropped day at default time (12:00)
+        handleTimeslotDrop(date, '12:00', true) // autoSchedule = true
+      } else {
+        // Open dialog for manual scheduling/rescheduling
+        handleTimeslotDrop(date, '12:00', false) // autoSchedule = false
+      }
     }
   }
 
   return (
     <DndContext 
+      sensors={sensors}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd} 
       collisionDetection={(args) => {
@@ -1175,6 +1258,28 @@ export default function Schedule() {
                 key={`calendar-${calendarKey}`}
                 scheduledPosts={scheduled.map(s => ({ ...s, type: 'scheduled' }))}
                 drafts={drafts}
+                dragJustEndedRef={dragJustEndedRef}
+                draggedItemsRef={draggedItemsRef}
+                currentDate={calendarCurrentDate}
+                onDateChange={(date) => {
+                  try {
+                    // Validate date is a valid Date object
+                    if (date instanceof Date && !isNaN(date.getTime())) {
+                      setCalendarCurrentDate(date)
+                    }
+                  } catch (error) {
+                    console.error('Error in onDateChange:', error)
+                  }
+                }}
+                onViewChange={(view) => {
+                  try {
+                    if (view) {
+                      setCalendarView(view)
+                    }
+                  } catch (error) {
+                    console.error('Error in onViewChange:', error)
+                  }
+                }}
                 onDateClick={(date) => {
                   // Auto-fill date when clicking calendar
                   if (selectedDraft && !scheduledDate) {
@@ -1183,31 +1288,38 @@ export default function Schedule() {
                   }
                 }}
                 onPostClick={(post) => {
-                  // Show post details - allow cancel/reschedule
-                  // If post has draft_id, try to find the actual draft from store
-                  let draftToSelect = post
-                  if (post.draft_id) {
-                    const actualDraft = drafts.find(d => {
-                      // Match by draft_id if available, or by id
-                      return d.id === post.draft_id || String(d.id) === String(post.draft_id)
-                    })
-                    if (actualDraft) {
-                      draftToSelect = actualDraft
+                  try {
+                    // Show post details - allow cancel/reschedule
+                    // If post has draft_id, try to find the actual draft from store
+                    let draftToSelect = post
+                    if (post && post.draft_id) {
+                      const actualDraft = drafts.find(d => {
+                        // Match by draft_id if available, or by id
+                        return d.id === post.draft_id || String(d.id) === String(post.draft_id)
+                      })
+                      if (actualDraft) {
+                        draftToSelect = actualDraft
+                      }
                     }
+                    setSelectedDraft(draftToSelect)
+                    // Pre-fill date/time from scheduled post
+                    if (post && post.scheduled_time) {
+                      const scheduledDate = new Date(post.scheduled_time)
+                      if (!isNaN(scheduledDate.getTime())) {
+                        setScheduledDate(format(scheduledDate, 'yyyy-MM-dd'))
+                        setScheduledTime(format(scheduledDate, 'HH:mm'))
+                      }
+                    }
+                    // Prioritize draft's platform tag if available, otherwise use post.platform
+                    const draftPlatform = getPlatformFromTags(draftToSelect?.tags)
+                    const postPlatform = draftPlatform || post?.platform || 'twitter'
+                    setPlatform(postPlatform)
+                    lastSelectedPlatformRef.current = postPlatform
+                    setShowScheduleDialog(true)
+                  } catch (error) {
+                    console.error('Error handling post click:', error)
+                    showToast.error('Error', 'Failed to open post details. Please try again.')
                   }
-                  setSelectedDraft(draftToSelect)
-                  // Pre-fill date/time from scheduled post
-                  if (post.scheduled_time) {
-                    const scheduledDate = new Date(post.scheduled_time)
-                    setScheduledDate(format(scheduledDate, 'yyyy-MM-dd'))
-                    setScheduledTime(format(scheduledDate, 'HH:mm'))
-                  }
-                  // Prioritize draft's platform tag if available, otherwise use post.platform
-                  const draftPlatform = getPlatformFromTags(draftToSelect.tags)
-                  const postPlatform = draftPlatform || post.platform || 'twitter'
-                  setPlatform(postPlatform)
-                  lastSelectedPlatformRef.current = postPlatform
-                  setShowScheduleDialog(true)
                 }}
                 onDraftDrop={handleDraftDrop}
               />
@@ -1366,57 +1478,42 @@ export default function Schedule() {
               </div>
             </div>
             
-            {/* Show Cancel button if editing a scheduled post */}
-            {selectedDraft?.id && scheduled.some(s => s.id === selectedDraft.id) && (
-              <div className="pt-2 border-t">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => handleCancelScheduled(selectedDraft)}
-                  disabled={loading}
-                  className="w-full"
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Cancel Scheduled Post
-                </Button>
-              </div>
-            )}
           </div>
 
-          <DialogFooter className="gap-2 sm:justify-between">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 sm:gap-2">
             {/* Left side: Secondary actions */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 w-full sm:w-auto">
               {(selectedDraft?.tags?.includes('confirmed') || (selectedDraft?.id && scheduled.some(s => s.id === selectedDraft.id))) && (
                 <Button
                   variant="outline"
                   onClick={handleEditDraft}
                   disabled={loading}
+                  className="flex-1 sm:flex-initial"
                 >
                   <Edit className="mr-2 h-4 w-4" />
                   Send to Inbox
                 </Button>
               )}
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowScheduleDialog(false)
-                  // Don't reset platform - preserve user's selection
-                  setSelectedDraft(null)
-                  setScheduledDate('')
-                  setScheduledTime('')
-                }}
-                disabled={loading}
-              >
-                Cancel
-              </Button>
+              {selectedDraft && (
+                <Button
+                  variant="destructive"
+                  onClick={handleDelete}
+                  disabled={loading}
+                  className="flex-1 sm:flex-initial"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </Button>
+              )}
             </div>
             
             {/* Right side: Primary actions */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 w-full sm:w-auto">
               <Button
                 variant="default"
                 onClick={handlePostNow}
                 disabled={loading || !selectedDraft?.content?.trim()}
+                className="flex-1 sm:flex-initial"
               >
                 <Send className="mr-2 h-4 w-4" />
                 Post Now
@@ -1424,6 +1521,7 @@ export default function Schedule() {
               <Button
                 onClick={handleSchedule}
                 disabled={loading || !selectedDraft?.content?.trim() || !scheduledDate || !scheduledTime}
+                className="flex-1 sm:flex-initial"
               >
                 {loading ? (
                   <>
@@ -1615,6 +1713,29 @@ function DraggableDraft({ draft, onClick, isSelected, dragJustEndedRef }) {
   
   const timeAgo = formatDate(draft.created_at)
 
+  // Track mouse position to distinguish clicks from drags
+  const mouseDownPosRef = useRef(null)
+  const hasMovedRef = useRef(false)
+  const dragStartedRef = useRef(false)
+
+  const handleMouseDown = (e) => {
+    mouseDownPosRef.current = { x: e.clientX, y: e.clientY }
+    hasMovedRef.current = false
+    dragStartedRef.current = false
+  }
+
+  const handleMouseMove = (e) => {
+    if (mouseDownPosRef.current && !dragStartedRef.current) {
+      const deltaX = Math.abs(e.clientX - mouseDownPosRef.current.x)
+      const deltaY = Math.abs(e.clientY - mouseDownPosRef.current.y)
+      // If mouse moved more than 5px, consider it a drag
+      if (deltaX > 5 || deltaY > 5) {
+        hasMovedRef.current = true
+        dragStartedRef.current = true
+      }
+    }
+  }
+
   const handleClick = (e) => {
     // Prevent click if drag just ended
     if (dragJustEndedRef?.current) {
@@ -1622,7 +1743,24 @@ function DraggableDraft({ draft, onClick, isSelected, dragJustEndedRef }) {
       e.stopPropagation()
       return
     }
+
+    // If mouse moved significantly or drag started, it was a drag, not a click
+    if (hasMovedRef.current || dragStartedRef.current || isDragging) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+
     onClick()
+  }
+
+  const handleMouseUp = () => {
+    // Small delay to check if it was a click before clearing
+    setTimeout(() => {
+      mouseDownPosRef.current = null
+      hasMovedRef.current = false
+      dragStartedRef.current = false
+    }, 100)
   }
 
   return (
@@ -1632,6 +1770,9 @@ function DraggableDraft({ draft, onClick, isSelected, dragJustEndedRef }) {
       {...listeners}
       {...attributes}
       onClick={handleClick}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
       className={cn(
         "cursor-grab active:cursor-grabbing border-border/80 hover:border-border hover:shadow-md hover:scale-[1.02]",
         // Only apply transitions when not dragging for better performance
