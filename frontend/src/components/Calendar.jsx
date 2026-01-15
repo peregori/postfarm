@@ -177,19 +177,24 @@ function DayViewSlotSimple({ slotId, platform, posts, isLast, onPostClick, hour,
     data: { date: currentDate, hour },
   })
 
+  // Show max 2 posts, then "+X more" badge
+  const maxVisible = 2
+  const visiblePosts = posts.slice(0, maxVisible)
+  const remainingCount = posts.length - maxVisible
+
   return (
     <div
       ref={setNodeRef}
       className={cn(
-        "h-full min-h-[50px] border-r border-border p-1 relative transition-all duration-200 overflow-y-auto",
+        "h-full min-h-[80px] border-r border-border p-1 relative transition-all duration-200 flex flex-col overflow-hidden",
         isLast && "border-r-0",
         isOver && "bg-primary/10 ring-1 ring-primary/40",
         "hover:bg-muted/30"
       )}
       style={{ pointerEvents: 'auto' }}
     >
-      <div className="space-y-1">
-        {posts.map((post) => (
+      <div className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-thin min-w-0">
+        {visiblePosts.map((post) => (
           <DraggableScheduledPost
             key={post.id}
             post={post}
@@ -204,6 +209,11 @@ function DayViewSlotSimple({ slotId, platform, posts, isLast, onPostClick, hour,
           />
         ))}
       </div>
+      {remainingCount > 0 && (
+        <Badge variant="secondary" className="w-full text-[9px] justify-center py-0.5 mt-1 flex-shrink-0">
+          +{remainingCount} more
+        </Badge>
+      )}
     </div>
   )
 }
@@ -751,32 +761,44 @@ export default function Calendar({
       data: { date: day, hour },
     })
 
+    // Show max 2 posts, then "+X more" badge
+    const maxVisible = 2
+    const visiblePosts = postsForSlot.slice(0, maxVisible)
+    const remainingCount = postsForSlot.length - maxVisible
+
     return (
       <div
         key={`${hour}-${dayIdx}`}
         ref={setNodeRef}
         className={cn(
-          "h-full min-h-[40px] border-r border-border p-1 relative transition-all duration-200 overflow-hidden",
+          "h-full min-h-[80px] border-r border-border p-1 relative transition-all duration-200 flex flex-col overflow-hidden",
           dayIdx === 6 && "border-r-0",
           isOver && "bg-primary/10 ring-1 ring-primary/40",
           "hover:bg-muted/30"
         )}
         style={{ pointerEvents: 'auto' }}
       >
-        {postsForSlot.map((post) => (
-          <DraggableScheduledPost
-            key={post.id}
-            post={post}
-            variant="week"
-            itemCount={postsForSlot.length}
-            dragJustEndedRef={dragJustEndedRef}
-            draggedItemsRef={draggedItemsRef}
-            onClick={(e) => {
-              e.stopPropagation()
-              onPostClick && onPostClick(post)
-            }}
-          />
-        ))}
+        <div className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-thin min-w-0">
+          {visiblePosts.map((post) => (
+            <DraggableScheduledPost
+              key={post.id}
+              post={post}
+              variant="week"
+              itemCount={postsForSlot.length}
+              dragJustEndedRef={dragJustEndedRef}
+              draggedItemsRef={draggedItemsRef}
+              onClick={(e) => {
+                e.stopPropagation()
+                onPostClick && onPostClick(post)
+              }}
+            />
+          ))}
+        </div>
+        {remainingCount > 0 && (
+          <Badge variant="secondary" className="w-full text-[9px] justify-center py-0.5 mt-1 flex-shrink-0">
+            +{remainingCount} more
+          </Badge>
+        )}
       </div>
     )
   }
@@ -942,26 +964,28 @@ export default function Calendar({
               )
             })}
           </div>
-          <div className="flex-1 grid min-h-0 overflow-hidden" style={{ gridTemplateRows: `repeat(${hours.length}, minmax(40px, 1fr))` }}>
-            {hours.map((hour, hourIdx) => (
-              <div key={hour} className={cn(
-                "grid grid-cols-[50px_repeat(7,1fr)] border-b border-border min-h-0",
-                hourIdx === hours.length - 1 && "border-b-0"
-              )}>
-                <div className="p-1.5 text-[10px] font-medium text-muted-foreground/70 border-r border-border bg-muted/20 flex items-center justify-end pr-2">
-                  {format(setMinutes(setHours(new Date(), hour), 0), 'HH:mm')}
+          <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
+            <div className="grid min-h-full" style={{ gridTemplateRows: `repeat(${hours.length}, minmax(80px, 1fr))` }}>
+              {hours.map((hour, hourIdx) => (
+                <div key={hour} className={cn(
+                  "grid grid-cols-[50px_repeat(7,1fr)] border-b border-border",
+                  hourIdx === hours.length - 1 && "border-b-0"
+                )}>
+                  <div className="p-1.5 text-[10px] font-medium text-muted-foreground/70 border-r border-border bg-muted/20 flex items-center justify-end pr-2">
+                    {format(setMinutes(setHours(new Date(), hour), 0), 'HH:mm')}
+                  </div>
+                  {weekDays.map((day, dayIdx) => (
+                    <WeekTimeSlot 
+                      key={`${hour}-${dayIdx}`}
+                      day={day} 
+                      hour={hour} 
+                      dayIdx={dayIdx}
+                      hourIdx={hourIdx}
+                    />
+                  ))}
                 </div>
-                {weekDays.map((day, dayIdx) => (
-                  <WeekTimeSlot 
-                    key={`${hour}-${dayIdx}`}
-                    day={day} 
-                    hour={hour} 
-                    dayIdx={dayIdx}
-                    hourIdx={hourIdx}
-                  />
-                ))}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -1002,10 +1026,11 @@ export default function Calendar({
           </div>
 
           {/* Grid Content - fills remaining space */}
-          <div 
-            className="flex-1 grid min-h-0 overflow-hidden" 
-            style={{ gridTemplateRows: `repeat(${hours.length}, minmax(50px, 1fr))` }}
-          >
+          <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
+            <div 
+              className="grid min-h-full" 
+              style={{ gridTemplateRows: `repeat(${hours.length}, minmax(80px, 1fr))` }}
+            >
             {hours.map((hour, hourIdx) => (
               <div key={hour} className={cn(
                 "grid grid-cols-[70px_repeat(2,1fr)] border-b border-border min-h-0",
@@ -1049,6 +1074,7 @@ export default function Calendar({
                 })}
               </div>
             ))}
+            </div>
           </div>
         </div>
       )}
@@ -1297,14 +1323,18 @@ function ScheduledPostCard({ post, variant = 'default', itemCount = 1, onClick }
     : 'gap-1 sm:gap-1.5'
 
   const handleClick = (e) => {
-    e?.stopPropagation()
-    onClick?.(e)
+    // Only stop propagation and call onClick if we have one
+    // Otherwise let it bubble up to DraggableScheduledPost
+    if (onClick) {
+      e?.stopPropagation()
+      onClick(e)
+    }
   }
 
   return (
     <div
       className={cn(
-        "rounded-lg border cursor-pointer transition-all duration-200 overflow-hidden",
+        "rounded-lg border cursor-pointer transition-all duration-200 overflow-hidden w-full min-w-0",
         "hover:shadow-sm active:scale-[0.98]",
         post.platform === 'linkedin'
           ? "bg-blue-50/50 dark:bg-blue-950/20 border-blue-200/60 dark:border-blue-800/40 hover:border-blue-400/60 dark:hover:border-blue-600/40"
@@ -1446,13 +1476,12 @@ function DraggableScheduledPost({ post, children, onClick, variant, itemCount, d
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       className={cn(
-        "cursor-grab active:cursor-grabbing",
-        variant === 'month' && "w-full",
+        "cursor-grab active:cursor-grabbing w-full min-w-0",
         isDragging && "opacity-50 z-50"
       )}
     >
       {children ? (
-        <div className={variant === 'month' ? "w-full" : ""}>
+        <div className="w-full min-w-0">
           {children}
         </div>
       ) : (

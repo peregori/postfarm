@@ -1007,6 +1007,12 @@ export default function Schedule() {
     
     // Helper function to parse timeslot and call appropriate handler
     const handleTimeslotDrop = (date, time, autoSchedule) => {
+      // Always set dragJustEndedRef to prevent click events after successful drops
+      dragJustEndedRef.current = true
+      setTimeout(() => {
+        dragJustEndedRef.current = false
+      }, 300) // Longer delay for successful drops to ensure click is blocked
+      
       if (isDraft) {
         const draftId = activeId.replace('draft-', '')
         if (draftId) {
