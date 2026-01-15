@@ -918,9 +918,12 @@ export default function DraftEditor({
                     <svg
                       role="img"
                       viewBox="0 0 24 24"
-                      className="h-3 w-3"
-                      fill="currentColor"
-                      style={{ color: manualPlatform === 'linkedin' ? '#0A66C2' : 'hsl(var(--muted-foreground))' }}
+                      className={cn(
+                        "h-3 w-3 fill-current",
+                        manualPlatform === 'linkedin' 
+                          ? "text-[#0A66C2] dark:text-[#71B7FB]" 
+                          : "text-muted-foreground"
+                      )}
                       preserveAspectRatio="xMidYMid meet"
                     >
                       <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
@@ -938,9 +941,12 @@ export default function DraftEditor({
                     <svg
                       role="img"
                       viewBox="0 0 24 24"
-                      className="h-2.5 w-2.5"
-                      fill="currentColor"
-                      style={{ color: manualPlatform === 'twitter' ? '#000000' : 'hsl(var(--muted-foreground))' }}
+                      className={cn(
+                        "h-2.5 w-2.5 fill-current",
+                        manualPlatform === 'twitter' 
+                          ? "text-black dark:text-white" 
+                          : "text-muted-foreground"
+                      )}
                       preserveAspectRatio="xMidYMid meet"
                     >
                       <path d={simpleIcons.siX.path} />
@@ -1105,7 +1111,7 @@ export default function DraftEditor({
                             handleGenerate()
                           }
                         }}
-                        className="text-sm focus-visible:ring-1 focus-visible:ring-primary/20 focus-visible:ring-offset-0 resize-none pr-10 min-h-[36px] max-h-[200px] overflow-y-auto scrollbar-thin border-border/50 bg-muted/30"
+                        className="text-sm resize-none pr-10 min-h-[36px] max-h-[200px] overflow-y-auto scrollbar-thin border-border/50 bg-muted/30"
                         style={{ height: '36px', transition: 'height 0.15s ease-out' }}
                         autoFocus
                       />
@@ -1145,7 +1151,7 @@ export default function DraftEditor({
                             handleEditSelection()
                           }
                         }}
-                        className="text-sm focus-visible:ring-1 focus-visible:ring-primary/20 focus-visible:ring-offset-0 resize-none pr-10 min-h-[36px] max-h-[200px] overflow-y-auto scrollbar-thin border-border/50 bg-muted/30"
+                        className="text-sm resize-none pr-10 min-h-[36px] max-h-[200px] overflow-y-auto scrollbar-thin border-border/50 bg-muted/30"
                         style={{ height: '36px', transition: 'height 0.15s ease-out' }}
                         autoFocus
                       />
@@ -1404,9 +1410,12 @@ export default function DraftEditor({
                   <svg
                     role="img"
                     viewBox="0 0 24 24"
-                    className="h-3 w-3"
-                    fill="currentColor"
-                    style={{ color: manualPlatform === 'linkedin' ? '#0A66C2' : 'hsl(var(--muted-foreground))' }}
+                    className={cn(
+                      "h-3 w-3 fill-current",
+                      manualPlatform === 'linkedin' 
+                        ? "text-[#0A66C2] dark:text-[#71B7FB]" 
+                        : "text-muted-foreground"
+                    )}
                     preserveAspectRatio="xMidYMid meet"
                   >
                     <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
@@ -1424,14 +1433,17 @@ export default function DraftEditor({
                   <svg
                     role="img"
                     viewBox="0 0 24 24"
-                    className="h-2.5 w-2.5"
-                    fill="currentColor"
-                    style={{ color: manualPlatform === 'twitter' ? '#000000' : 'hsl(var(--muted-foreground))' }}
+                    className={cn(
+                      "h-2.5 w-2.5 fill-current",
+                      manualPlatform === 'twitter' 
+                        ? "text-black dark:text-white" 
+                        : "text-muted-foreground"
+                    )}
                     preserveAspectRatio="xMidYMid meet"
                   >
-                      <path d={simpleIcons.siX.path} />
-                    </svg>
-                  </button>
+                    <path d={simpleIcons.siX.path} />
+                  </svg>
+                </button>
                 </div>
               </div>
             

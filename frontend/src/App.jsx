@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
 import Schedule from './pages/Schedule'
@@ -7,8 +8,16 @@ import { Toaster } from './components/ui/toaster'
 import { HealthProvider } from './contexts/HealthContext'
 import { HotkeysProvider } from './contexts/HotkeysContext'
 import ErrorBoundary from './components/ErrorBoundary'
+import useUIStore from './stores/uiStore'
 
 function App() {
+  const initializeTheme = useUIStore((state) => state.initializeTheme)
+
+  // Initialize theme on app mount
+  useEffect(() => {
+    initializeTheme()
+  }, [initializeTheme])
+
   return (
     <ErrorBoundary>
       <HotkeysProvider>

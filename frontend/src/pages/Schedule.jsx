@@ -1192,7 +1192,7 @@ export default function Schedule() {
                   placeholder="Search drafts..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 h-9 text-sm bg-muted/50 border-muted focus-visible:ring-1 focus-visible:ring-ring"
+                  className="pl-9 h-9 text-sm bg-muted/50 border-muted"
                 />
               </div>
             </div>
@@ -1375,9 +1375,12 @@ export default function Schedule() {
                   <svg
                     role="img"
                     viewBox="0 0 24 24"
-                    className="h-3 w-3"
-                    fill="currentColor"
-                    style={{ color: platform === 'linkedin' ? '#0A66C2' : 'hsl(var(--muted-foreground))' }}
+                    className={cn(
+                      "h-3 w-3 fill-current",
+                      platform === 'linkedin' 
+                        ? "text-[#0A66C2] dark:text-[#71B7FB]" 
+                        : "text-muted-foreground"
+                    )}
                     preserveAspectRatio="xMidYMid meet"
                   >
                     <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
@@ -1398,9 +1401,12 @@ export default function Schedule() {
                   <svg
                     role="img"
                     viewBox="0 0 24 24"
-                    className="h-2.5 w-2.5"
-                    fill="currentColor"
-                    style={{ color: platform === 'twitter' ? '#000000' : 'hsl(var(--muted-foreground))' }}
+                    className={cn(
+                      "h-2.5 w-2.5 fill-current",
+                      platform === 'twitter' 
+                        ? "text-black dark:text-white" 
+                        : "text-muted-foreground"
+                    )}
                     preserveAspectRatio="xMidYMid meet"
                   >
                     <path d={simpleIcons.siX.path} />
@@ -1577,9 +1583,7 @@ export default function Schedule() {
                             <svg
                               role="img"
                               viewBox="0 0 24 24"
-                              className="h-2.5 w-2.5 shrink-0"
-                              fill="currentColor"
-                              style={{ color: '#000000' }}
+                              className="h-2.5 w-2.5 shrink-0 fill-current text-black dark:text-white"
                               preserveAspectRatio="xMidYMid meet"
                             >
                               <path d={simpleIcons.siX.path} />
@@ -1588,9 +1592,7 @@ export default function Schedule() {
                             <svg
                               role="img"
                               viewBox="0 0 24 24"
-                              className="h-3 w-3 shrink-0"
-                              fill="currentColor"
-                              style={{ color: '#0A66C2' }}
+                              className="h-3 w-3 shrink-0 fill-current text-[#0A66C2] dark:text-[#71B7FB]"
                               preserveAspectRatio="xMidYMid meet"
                             >
                               <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
@@ -1626,9 +1628,7 @@ export default function Schedule() {
                           <svg
                             role="img"
                             viewBox="0 0 24 24"
-                            className="h-2.5 w-2.5 shrink-0"
-                            fill="currentColor"
-                            style={{ color: '#000000' }}
+                            className="h-2.5 w-2.5 shrink-0 fill-current text-black dark:text-white"
                             preserveAspectRatio="xMidYMid meet"
                           >
                             <path d={simpleIcons.siX.path} />
@@ -1637,9 +1637,7 @@ export default function Schedule() {
                           <svg
                             role="img"
                             viewBox="0 0 24 24"
-                            className="h-3 w-3 shrink-0"
-                            fill="currentColor"
-                            style={{ color: '#0A66C2' }}
+                            className="h-3 w-3 shrink-0 fill-current text-[#0A66C2] dark:text-[#71B7FB]"
                             preserveAspectRatio="xMidYMid meet"
                           >
                             <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
@@ -1801,9 +1799,7 @@ function DraggableDraft({ draft, onClick, isSelected, dragJustEndedRef }) {
                   <svg
                     role="img"
                     viewBox="0 0 24 24"
-                    className="h-2.5 w-2.5 shrink-0"
-                    fill="currentColor"
-                    style={{ color: '#000000' }}
+                    className="h-2.5 w-2.5 shrink-0 fill-current text-black dark:text-white"
                     preserveAspectRatio="xMidYMid meet"
                   >
                     <path d={simpleIcons.siX.path} />
@@ -1812,9 +1808,7 @@ function DraggableDraft({ draft, onClick, isSelected, dragJustEndedRef }) {
                   <svg
                     role="img"
                     viewBox="0 0 24 24"
-                    className="h-3 w-3 shrink-0"
-                    fill="currentColor"
-                    style={{ color: '#0A66C2' }}
+                    className="h-3 w-3 shrink-0 fill-current text-[#0A66C2] dark:text-[#71B7FB]"
                     preserveAspectRatio="xMidYMid meet"
                   >
                     <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
