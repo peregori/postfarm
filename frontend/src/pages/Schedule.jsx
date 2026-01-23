@@ -52,6 +52,7 @@ export default function Schedule() {
   const scheduleDraft = useDraftStore((state) => state.scheduleDraft)
   const unscheduleDraft = useDraftStore((state) => state.unscheduleDraft)
   const updateDraft = useDraftStore((state) => state.updateDraft)
+  const createDraft = useDraftStore((state) => state.createDraft)
   const selectDraft = useDraftStore((state) => state.selectDraft)
   const deleteDraft = useDraftStore((state) => state.deleteDraft)
   const navigate = useNavigate()
@@ -409,29 +410,102 @@ export default function Schedule() {
     }
   }
 
-  const handleEditDraft = () => {
+  const handleEditDraft = async () => {
     if (!selectedDraft?.id) return
 
+    // Handle both draft objects (UUID) and scheduled post objects (integer ID with draft_id)
+    let draftUuid = null
+    let draftToUpdate = null
+    
+    // If selectedDraft has draft_id, it's a scheduled post object - find the actual draft
+    if (selectedDraft.draft_id) {
+      // This is a scheduled post - find the actual draft in the store using draft_id
+      // Try multiple matching strategies to handle different ID formats
+      draftToUpdate = drafts.find(d => {
+        const draftId = String(d.id)
+        const searchId = String(selectedDraft.draft_id)
+        return draftId === searchId || d.id === selectedDraft.draft_id
+      })
+      
+      // If draft not found in local store, create it from the scheduled post's content
+      if (!draftToUpdate) {
+        console.log('Draft not found in store, creating from scheduled post:', selectedDraft.draft_id)
+        
+        // Try to fetch the draft from backend first
+        let backendDraft = null
+        try {
+          const backendDraftId = typeof selectedDraft.draft_id === 'string' 
+            ? parseInt(selectedDraft.draft_id, 10) 
+            : selectedDraft.draft_id
+          backendDraft = await draftsApi.get(backendDraftId)
+        } catch (error) {
+          console.warn('Could not fetch draft from backend:', error)
+        }
+        
+        // Create a new draft in the local store from the scheduled post's content
+        const newDraft = createDraft(selectedDraft.content || backendDraft?.content || '')
+        
+        // Update with metadata from backend if available
+        if (backendDraft) {
+          updateDraft(newDraft.id, {
+            title: backendDraft.title || null,
+            tags: (backendDraft.tags || []).filter(tag => tag !== 'confirmed'),
+            content: backendDraft.content,
+          })
+        } else {
+          // Use scheduled post's platform tag if available
+          const platformTag = selectedDraft.platform ? `platform:${selectedDraft.platform}` : null
+          const tags = platformTag ? [platformTag] : []
+          updateDraft(newDraft.id, {
+            tags: tags,
+            content: selectedDraft.content || '',
+          })
+        }
+        
+        draftUuid = newDraft.id
+        draftToUpdate = drafts.find(d => d.id === draftUuid)
+      } else {
+        draftUuid = draftToUpdate.id
+      }
+    } else {
+      // This is a draft object directly - find it in the store
+      draftToUpdate = drafts.find(d => {
+        const draftId = String(d.id)
+        const searchId = String(selectedDraft.id)
+        return draftId === searchId || d.id === selectedDraft.id
+      })
+      if (!draftToUpdate) {
+        console.warn('Draft not found in store for id:', selectedDraft.id)
+        showToast.error('Error', 'Draft not found in local store.')
+        return
+      }
+      draftUuid = draftToUpdate.id
+    }
+
+    console.log('Sending draft back to inbox:', { draftUuid, currentTags: draftToUpdate?.tags })
+
     // Remove "confirmed" tag to send draft back to Inbox
-    const currentTags = selectedDraft.tags || []
+    const currentTags = draftToUpdate?.tags || []
     const updatedTags = currentTags.filter(tag => tag !== 'confirmed')
     
-    // Update the draft to unconfirm it
-    updateDraft(selectedDraft.id, {
+    // Update the draft in the store
+    updateDraft(draftUuid, {
       tags: updatedTags,
       confirmed: false
     })
     
     // Select the draft in the store
-    selectDraft(selectedDraft.id)
+    selectDraft(draftUuid)
     
     // Close the dialog
     setShowScheduleDialog(false)
     setSelectedDraft(null)
     
+    // Small delay to ensure store persistence completes
+    await new Promise(resolve => setTimeout(resolve, 50))
+    
     // Navigate to Inbox for editing
     navigate('/inbox')
-    
     showToast.success('Draft Sent to Inbox', 'You can now edit the draft in the Inbox.')
   }
 

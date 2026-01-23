@@ -117,7 +117,7 @@ if [ ! -d "node_modules" ]; then
 fi
 
 # Start frontend in background
-echo -e "${GREEN}Frontend starting on http://localhost:5173${NC}"
+echo -e "${GREEN}Frontend starting on http://localhost:3000${NC}"
 npm run dev > /tmp/postfarm-frontend.log 2>&1 &
 FRONTEND_PID=$!
 
@@ -136,7 +136,7 @@ echo -e "\n${GREEN}========================================${NC}"
 echo -e "${GREEN}  PostFarm is running!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo -e "${BLUE}Backend:${NC}  http://localhost:8000"
-echo -e "${BLUE}Frontend:${NC} http://localhost:5173"
+echo -e "${BLUE}Frontend:${NC} http://localhost:3000"
 echo -e "${BLUE}API Docs:${NC} http://localhost:8000/docs"
 echo -e "\n${YELLOW}Press Ctrl+C to stop all services${NC}\n"
 echo -e "${YELLOW}View logs:${NC}"
