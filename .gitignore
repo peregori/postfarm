@@ -192,3 +192,6 @@ backend/**/__pycache__/
 backend/.pytest_cache/
 backend/venv/
 backend/handpost.db
+
+# Ralph config (may contain API key)
+.cursor/ralph-config.json
