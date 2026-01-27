@@ -143,15 +143,16 @@
 
 # **PHASE 7 — AUTHENTICATION & USER ACCOUNTS**
 
-### **12. User Authentication**
+### **12. User Authentication** - WIP
 
-* Auth provider integration (Clerk)
-* Sign up / Sign in / Sign out flows
-* Email verification
-* Password reset flow
-* OAuth login (Google, GitHub)
-* Protected routes (redirect to login if unauthenticated)
-* User profile page (name, email, avatar)
+* Auth provider integration (Clerk) - DONE
+* Sign up / Sign in / Sign out flows - DONE
+* Email verification - DONE
+* Password reset flow - TO VERIFY
+* OAuth login (Google, GitHub) - NOT DONE
+* Protected routes (redirect to login if unauthenticated) - TO VERIFY
+* User profile page (name, email, avatar) - DONE
+* Embbed into existing UI, improve UI and Clerk JWKS set up - NOT DONE
 
 ### **13. Data Migration to User-Scoped Storage**
 

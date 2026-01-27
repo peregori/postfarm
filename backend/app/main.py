@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
@@ -7,6 +7,7 @@ import os
 from app.database import init_db
 from app.routers import posts, drafts, scheduler, llm, platforms, models, server, providers
 from app.services.scheduler_service import scheduler_service
+from app.middleware.auth import get_current_user
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -33,15 +34,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(llm.router, prefix="/api/llm", tags=["LLM"])
-app.include_router(providers.router, prefix="/api/providers", tags=["Providers"])
-app.include_router(posts.router, prefix="/api/posts", tags=["Posts"])
-app.include_router(drafts.router, prefix="/api/drafts", tags=["Drafts"])
-app.include_router(scheduler.router, prefix="/api/scheduler", tags=["Scheduler"])
-app.include_router(platforms.router, prefix="/api/platforms", tags=["Platforms"])
-app.include_router(models.router, prefix="/api/models", tags=["Models"])
-app.include_router(server.router, prefix="/api/server", tags=["Server"])
+# Include routers with authentication
+# All routes except health check require authentication
+auth_dependency = [Depends(get_current_user)]
+
+app.include_router(llm.router, prefix="/api/llm", tags=["LLM"], dependencies=auth_dependency)
+app.include_router(providers.router, prefix="/api/providers", tags=["Providers"], dependencies=auth_dependency)
+app.include_router(posts.router, prefix="/api/posts", tags=["Posts"], dependencies=auth_dependency)
+app.include_router(drafts.router, prefix="/api/drafts", tags=["Drafts"], dependencies=auth_dependency)
+app.include_router(scheduler.router, prefix="/api/scheduler", tags=["Scheduler"], dependencies=auth_dependency)
+app.include_router(platforms.router, prefix="/api/platforms", tags=["Platforms"], dependencies=auth_dependency)
+app.include_router(models.router, prefix="/api/models", tags=["Models"], dependencies=auth_dependency)
+app.include_router(server.router, prefix="/api/server", tags=["Server"], dependencies=auth_dependency)
 
 @app.get("/")
 async def root():

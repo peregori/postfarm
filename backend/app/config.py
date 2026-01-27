@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     # API Settings
     API_PREFIX: str = "/api"
     
+    # Clerk Authentication
+    CLERK_SECRET_KEY: str = ""
+    CLERK_PUBLISHABLE_KEY: str = ""
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

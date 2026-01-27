@@ -7,7 +7,7 @@ Copy this prompt when starting a new Cursor session:
 ```
 I'm continuing work on Postfarm. Before we start:
 
-1. Read TO-DO.md and tell me:
+1. Read docs/PROGRESS.md and tell me:
    - Current phase
    - What's completed
    - What's next

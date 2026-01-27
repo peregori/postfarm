@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
+import { UserButton } from '@clerk/clerk-react'
 import { 
   Settings, 
   Calendar,
@@ -6,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   PanelLeft,
+  User,
 } from 'lucide-react'
 import ServerStatus from './ServerStatus'
 import Logo from './Logo'
@@ -29,6 +31,7 @@ const navigation = [
   { name: 'Inbox', href: '/', icon: InboxIcon },
   { name: 'Schedule', href: '/schedule', icon: Calendar },
   { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Profile', href: '/profile', icon: User },
 ]
 
 export default function AppSidebar() {
@@ -124,7 +127,17 @@ export default function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <ServerStatus />
+            <div className="flex items-center justify-between px-2 py-1">
+              <UserButton 
+                afterSignOutUrl="/sign-in"
+                appearance={{
+                  elements: {
+                    avatarBox: "w-8 h-8"
+                  }
+                }}
+              />
+              <ServerStatus />
+            </div>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>

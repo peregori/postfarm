@@ -10,6 +10,48 @@ const client = axios.create({
   timeout: 120000, // 2 minutes timeout for LLM generation (reasoning models can be slow)
 })
 
+// Store for the auth token getter function
+let getAuthToken = null
+
+// Function to set the auth token getter (called from React component)
+export const setAuthTokenGetter = (getter) => {
+  getAuthToken = getter
+}
+
+// Request interceptor to add auth token
+client.interceptors.request.use(
+  async (config) => {
+    if (getAuthToken) {
+      try {
+        const token = await getAuthToken()
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`
+        }
+      } catch (error) {
+        // Token not available, continue without auth header
+        console.warn('Failed to get auth token:', error)
+      }
+    }
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
+
+// Response interceptor to handle 401 errors
+client.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid - redirect to sign-in
+      // This is handled by Clerk's SignedOut component, but log for debugging
+      console.warn('Unauthorized request - token may be expired')
+    }
+    return Promise.reject(error)
+  }
+)
+
 // LLM API
 export const llmApi = {
   generate: async (prompt, options = {}) => {
