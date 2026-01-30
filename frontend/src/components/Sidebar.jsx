@@ -1,16 +1,17 @@
-import { Link, useLocation } from 'react-router-dom'
-import { UserButton } from '@clerk/clerk-react'
-import { 
-  Settings, 
+import { Link, useLocation } from "react-router-dom";
+import { UserButton, useUser } from "@clerk/clerk-react";
+import {
+  Settings,
   Calendar,
   Inbox as InboxIcon,
   ChevronLeft,
   ChevronRight,
   PanelLeft,
   User,
-} from 'lucide-react'
-import ServerStatus from './ServerStatus'
-import Logo from './Logo'
+} from "lucide-react";
+import SyncStatusIndicator from "./SyncStatusIndicator";
+
+import Logo from "./Logo";
 import {
   Sidebar,
   SidebarContent,
@@ -23,21 +24,22 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from '@/components/ui/sidebar'
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+} from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const navigation = [
-  { name: 'Inbox', href: '/', icon: InboxIcon },
-  { name: 'Schedule', href: '/schedule', icon: Calendar },
-  { name: 'Settings', href: '/settings', icon: Settings },
-  { name: 'Profile', href: '/profile', icon: User },
-]
+  { name: "Inbox", href: "/", icon: InboxIcon },
+  { name: "Schedule", href: "/schedule", icon: Calendar },
+  { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Profile", href: "/profile", icon: User },
+];
 
 export default function AppSidebar() {
-  const location = useLocation()
-  const currentPath = location.pathname
-  const { state, toggleSidebar } = useSidebar()
+  const location = useLocation();
+  const currentPath = location.pathname;
+  const { state, toggleSidebar } = useSidebar();
+  const { user } = useUser();
 
   return (
     <Sidebar collapsible="icon" className="relative group/sidebar">
@@ -45,27 +47,32 @@ export default function AppSidebar() {
         <SidebarMenu className="w-full">
           <SidebarMenuItem>
             <div className="flex items-center gap-3 w-full h-full">
-              <div 
+              <div
                 className={cn(
                   "relative flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground cursor-pointer shrink-0 group/icon",
-                  state === "expanded" ? "ml-2" : ""
+                  state === "expanded" ? "ml-2" : "",
                 )}
                 onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  toggleSidebar()
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleSidebar();
                 }}
               >
                 {/* Logo - visible by default when collapsed, hidden on hover */}
-                <Logo className={cn(
-                  "size-4 transition-opacity",
-                  state === "collapsed" && "group-hover/icon:opacity-0"
-                )} size={16} />
+                <Logo
+                  className={cn(
+                    "size-4 transition-opacity",
+                    state === "collapsed" && "group-hover/icon:opacity-0",
+                  )}
+                  size={16}
+                />
                 {/* Sidebar icon - hidden by default when collapsed, visible on hover */}
                 {state === "collapsed" && (
-                  <PanelLeft className={cn(
-                    "h-4 w-4 absolute inset-0 m-auto opacity-0 group-hover/icon:opacity-100 transition-opacity text-sidebar-primary-foreground"
-                  )} />
+                  <PanelLeft
+                    className={cn(
+                      "h-4 w-4 absolute inset-0 m-auto opacity-0 group-hover/icon:opacity-100 transition-opacity text-sidebar-primary-foreground",
+                    )}
+                  />
                 )}
               </div>
               {state === "expanded" && (
@@ -78,14 +85,11 @@ export default function AppSidebar() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className={cn(
-                    "h-8 w-8 shrink-0",
-                    "hover:bg-sidebar-accent"
-                  )}
+                  className={cn("h-8 w-8 shrink-0", "hover:bg-sidebar-accent")}
                   onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    toggleSidebar()
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleSidebar();
                   }}
                 >
                   <PanelLeft className="h-4 w-4" />
@@ -98,18 +102,20 @@ export default function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup className="px-1.5 pt-4">
-          <SidebarGroupLabel className="px-3 mb-2 text-sidebar-foreground font-semibold">Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel className="px-3 mb-2 text-sidebar-foreground font-semibold">
+            Navigation
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-1">
               {navigation.map((item) => {
-                const Icon = item.icon
-                const isActive = currentPath === item.href
+                const Icon = item.icon;
+                const isActive = currentPath === item.href;
                 return (
                   <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton 
-                      asChild 
-                      tooltip={item.name} 
-                      isActive={isActive} 
+                    <SidebarMenuButton
+                      asChild
+                      tooltip={item.name}
+                      isActive={isActive}
                       className="px-3 [&>svg]:shrink-0 [&>span]:truncate"
                     >
                       <Link to={item.href} className="flex items-center gap-2">
@@ -118,7 +124,7 @@ export default function AppSidebar() {
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                )
+                );
               })}
             </SidebarMenu>
           </SidebarGroupContent>
@@ -126,22 +132,45 @@ export default function AppSidebar() {
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
+          {/* Sync Status */}
           <SidebarMenuItem>
-            <div className="flex items-center justify-between px-2 py-1">
-              <UserButton 
+            <div
+              className={cn(
+                "flex items-center px-2 py-1",
+                state === "collapsed" ? "justify-center" : "justify-start",
+              )}
+            >
+              <SyncStatusIndicator showLabel={state === "expanded"} />
+            </div>
+          </SidebarMenuItem>
+          {/* User Button */}
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              className="flex items-center gap-3 px-2 py-1 h-auto cursor-pointer"
+              onClick={() =>
+                document.querySelector(".cl-userButtonTrigger")?.click()
+              }
+            >
+              <UserButton
                 afterSignOutUrl="/sign-in"
                 appearance={{
                   elements: {
-                    avatarBox: "w-8 h-8"
-                  }
+                    avatarBox: "w-8 h-8",
+                  },
                 }}
               />
-              <ServerStatus />
-            </div>
+              {state === "expanded" && user && (
+                <span className="text-sm font-medium truncate">
+                  {[user.firstName, user.lastName].filter(Boolean).join(" ") ||
+                    user.username ||
+                    user.emailAddresses?.[0]?.emailAddress?.split("@")[0] ||
+                    "User"}
+                </span>
+              )}
+            </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
-  )
+  );
 }
-

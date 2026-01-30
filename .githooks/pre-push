@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${SKIP_LEAN_HOOKS:-0}" == "1" ]] && exit 0
+./scripts/verify.sh

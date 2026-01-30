@@ -14,4 +14,4 @@ psutil==5.9.6
 google-genai>=0.1.0
 PyJWT>=2.8.0
 cryptography>=42.0.0
-
+supabase>=2.0.0

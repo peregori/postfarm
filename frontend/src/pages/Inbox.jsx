@@ -1,8 +1,8 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { 
-  FileText, 
-  Clock, 
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  FileText,
+  Clock,
   Search,
   Plus,
   Send,
@@ -10,24 +10,26 @@ import {
   Twitter,
   Linkedin,
   Sparkles,
-  Edit
-} from 'lucide-react'
-import { llmApi, platformsApi } from '../api/client'
-import useDraftStore from '../stores/draftStore'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
+  Edit,
+  Loader2,
+} from "lucide-react";
+import { llmApi, platformsApi, serverApi } from "../api/client";
+import { useHealth } from "../contexts/HealthContext";
+import { showToast } from "@/lib/toast";
+import useDraftStore from "../stores/draftStore";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { cn } from '@/lib/utils'
-import { showToast } from '@/lib/toast'
-import DraftEditor from '@/components/DraftEditor'
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import DraftEditor from "@/components/DraftEditor";
 import {
   Dialog,
   DialogContent,
@@ -35,243 +37,327 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { getPreviewText } from '@/lib/contentCleaner'
-import * as simpleIcons from 'simple-icons'
+} from "@/components/ui/dialog";
+import { getPreviewText } from "@/lib/contentCleaner";
+import * as simpleIcons from "simple-icons";
 
 // Helper function to extract platform from tags
 const getPlatformFromTags = (tags) => {
-  if (!tags || !Array.isArray(tags)) return null
-  const platformTag = tags.find(tag => tag.startsWith('platform:'))
+  if (!tags || !Array.isArray(tags)) return null;
+  const platformTag = tags.find((tag) => tag.startsWith("platform:"));
   if (platformTag) {
-    return platformTag.replace('platform:', '')
+    return platformTag.replace("platform:", "");
   }
-  return null
-}
+  return null;
+};
 
 export default function Inbox() {
-  // Zustand store hooks
-  const drafts = useDraftStore((state) => state.drafts)
-  const selectedDraftId = useDraftStore((state) => state.selectedDraftId)
-  const selectedDraft = useDraftStore((state) => 
-    state.selectedDraftId 
-      ? state.drafts.find((d) => d.id === state.selectedDraftId) || null
-      : null
-  )
-  const selectDraft = useDraftStore((state) => state.selectDraft)
-  const createDraft = useDraftStore((state) => state.createDraft)
-  const updateDraft = useDraftStore((state) => state.updateDraft)
-  const deleteDraft = useDraftStore((state) => state.deleteDraft)
-  const confirmDraft = useDraftStore((state) => state.confirmDraft)
+  // Health context for AI status
+  const { healthStatus, currentProvider, refreshHealth } = useHealth();
 
-  const [searchQuery, setSearchQuery] = useState('')
-  const [loading, setLoading] = useState(false) // Store loads from localStorage, so no initial loading needed
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [sortBy, setSortBy] = useState('newest') // 'newest', 'oldest', 'alphabetical'
-  const [showPostNowDialog, setShowPostNowDialog] = useState(false)
-  const [postingPlatform, setPostingPlatform] = useState('twitter')
-  const [posting, setPosting] = useState(false)
-  const [showSchedulePrompt, setShowSchedulePrompt] = useState(false)
-  const [confirmedDraftId, setConfirmedDraftId] = useState(null)
-  const navigate = useNavigate()
+  // Zustand store hooks
+  const drafts = useDraftStore((state) => state.drafts);
+  const selectedDraftId = useDraftStore((state) => state.selectedDraftId);
+  const selectedDraft = useDraftStore((state) =>
+    state.selectedDraftId
+      ? state.drafts.find((d) => d.id === state.selectedDraftId) || null
+      : null,
+  );
+  const selectDraft = useDraftStore((state) => state.selectDraft);
+  const createDraft = useDraftStore((state) => state.createDraft);
+  const updateDraft = useDraftStore((state) => state.updateDraft);
+  const deleteDraft = useDraftStore((state) => state.deleteDraft);
+  const confirmDraft = useDraftStore((state) => state.confirmDraft);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loading, setLoading] = useState(false); // Store loads from localStorage, so no initial loading needed
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [sortBy, setSortBy] = useState("newest"); // 'newest', 'oldest', 'alphabetical'
+  const [showPostNowDialog, setShowPostNowDialog] = useState(false);
+  const [postingPlatform, setPostingPlatform] = useState("twitter");
+  const [posting, setPosting] = useState(false);
+  const [showSchedulePrompt, setShowSchedulePrompt] = useState(false);
+  const [confirmedDraftId, setConfirmedDraftId] = useState(null);
+  const [triggerAiPrompt, setTriggerAiPrompt] = useState(false);
+  const [aiConnecting, setAiConnecting] = useState(false);
+  const navigate = useNavigate();
+
+  // Determine AI status for the button
+  const hasSelectedModel =
+    typeof window !== "undefined" &&
+    localStorage.getItem("llama_selected_model");
+  const hasProviderInfo =
+    currentProvider || healthStatus.displayName || healthStatus.provider;
+  const isAiStopped =
+    !healthStatus.isHealthy && (hasProviderInfo || hasSelectedModel);
+
+  const getAiStatusColor = () => {
+    if (aiConnecting || healthStatus.loading) return "bg-yellow-500";
+    if (healthStatus.isHealthy) return "bg-green-500";
+    if (isAiStopped) return "bg-red-500";
+    return "bg-gray-500";
+  };
 
   const handleCreateNew = () => {
-    createDraft('')
-  }
+    createDraft("");
+  };
+
+  const handleStartAi = async () => {
+    // If AI is not healthy, try to start it first
+    if (!healthStatus.isHealthy) {
+      const selectedModel = localStorage.getItem("llama_selected_model");
+      if (!selectedModel) {
+        showToast.warning(
+          "Model Selection Required",
+          "Please select a model in Settings before using AI.",
+        );
+        return;
+      }
+
+      setAiConnecting(true);
+      try {
+        const result = await serverApi.start(selectedModel);
+        if (result.success) {
+          showToast.success(
+            "AI Started",
+            `AI is now ready with model: ${selectedModel}`,
+          );
+          refreshHealth();
+        } else {
+          showToast.error(
+            "Failed to Start AI",
+            result.message || "Unknown error occurred",
+          );
+          setAiConnecting(false);
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to start AI:", error);
+        showToast.error(
+          "Failed to Start AI",
+          error.response?.data?.detail ||
+            error.message ||
+            "Check console for details.",
+        );
+        setAiConnecting(false);
+        return;
+      }
+      setAiConnecting(false);
+    }
+
+    // Create draft if none selected
+    if (!selectedDraft) {
+      createDraft("");
+    }
+    // Trigger the AI prompt in DraftEditor
+    setTriggerAiPrompt(true);
+  };
 
   const handleSave = async ({ content }) => {
     try {
       if (selectedDraft?.id) {
         // Update existing draft
         // Generate title if draft doesn't have one and content is sufficient
-        let titleToSave = selectedDraft.title
+        let titleToSave = selectedDraft.title;
         if (!titleToSave && content && content.trim().length > 10) {
           try {
-            const titleResponse = await llmApi.generateTitle(content)
-            titleToSave = titleResponse.title
+            const titleResponse = await llmApi.generateTitle(content);
+            titleToSave = titleResponse.title;
           } catch (error) {
-            console.error('Title generation failed:', error)
+            console.error("Title generation failed:", error);
             // Use fallback
-            titleToSave = content.substring(0, 50)
-            if (content.length > 50) titleToSave += '...'
+            titleToSave = content.substring(0, 50);
+            if (content.length > 50) titleToSave += "...";
           }
         }
-        
+
         // Update draft in store
-        updateDraft(selectedDraft.id, { 
+        updateDraft(selectedDraft.id, {
           content,
-          title: titleToSave 
-        })
+          title: titleToSave,
+        });
       } else {
         // Create new draft with auto-generated title
-        const newDraft = createDraft(content)
-        
+        const newDraft = createDraft(content);
+
         // Generate title if content is sufficient
         if (content && content.trim().length > 10) {
           try {
-            const titleResponse = await llmApi.generateTitle(content)
-            updateDraft(newDraft.id, { title: titleResponse.title })
+            const titleResponse = await llmApi.generateTitle(content);
+            updateDraft(newDraft.id, { title: titleResponse.title });
           } catch (error) {
-            console.error('Title generation failed:', error)
+            console.error("Title generation failed:", error);
             // Use fallback
-            const fallbackTitle = content.substring(0, 50) + (content.length > 50 ? '...' : '')
-            updateDraft(newDraft.id, { title: fallbackTitle })
+            const fallbackTitle =
+              content.substring(0, 50) + (content.length > 50 ? "..." : "");
+            updateDraft(newDraft.id, { title: fallbackTitle });
           }
         }
       }
-      return true
+      return true;
     } catch (error) {
-      console.error('Save failed:', error)
-      throw error
+      console.error("Save failed:", error);
+      throw error;
     }
-  }
+  };
 
   const handleDelete = async () => {
     if (!selectedDraft?.id || deleting) {
       if (!selectedDraft?.id) {
         // New draft, just clear selection
-        selectDraft(null)
-        setShowDeleteDialog(false)
+        selectDraft(null);
+        setShowDeleteDialog(false);
       }
-      return
+      return;
     }
 
-    setDeleting(true)
+    setDeleting(true);
 
     try {
       // Delete from store
-      deleteDraft(selectedDraft.id)
-      showToast.success('Draft Deleted', 'Draft deleted successfully.')
-      setShowDeleteDialog(false)
+      deleteDraft(selectedDraft.id);
+      showToast.success("Draft Deleted", "Draft deleted successfully.");
+      setShowDeleteDialog(false);
     } catch (error) {
-      console.error('Delete failed:', error)
-      showToast.error('Delete Failed', 'Failed to delete draft.')
+      console.error("Delete failed:", error);
+      showToast.error("Delete Failed", "Failed to delete draft.");
       // Still close dialog on error
-      setShowDeleteDialog(false)
+      setShowDeleteDialog(false);
     } finally {
-      setDeleting(false)
+      setDeleting(false);
     }
-  }
+  };
 
   const handleDiscard = () => {
     // For new drafts, just clear selection
     if (!selectedDraft?.id) {
-      selectDraft(null)
-      return
+      selectDraft(null);
+      return;
     }
     // For existing drafts, show delete dialog
-    setShowDeleteDialog(true)
-  }
+    setShowDeleteDialog(true);
+  };
 
   const handleConfirm = async ({ content, platform }) => {
     if (!selectedDraft?.id) {
-      showToast.warning('Draft Required', 'Please save the draft first.')
-      return
+      showToast.warning("Draft Required", "Please save the draft first.");
+      return;
     }
 
     try {
       // Get current tags and add "confirmed" if not already present
-      const currentTags = selectedDraft.tags || []
-      const hasConfirmedTag = currentTags.includes('confirmed')
-      
+      const currentTags = selectedDraft.tags || [];
+      const hasConfirmedTag = currentTags.includes("confirmed");
+
       // Remove any existing platform tags and add the new one
-      const updatedTags = currentTags.filter(tag => !tag.startsWith('platform:'))
+      const updatedTags = currentTags.filter(
+        (tag) => !tag.startsWith("platform:"),
+      );
       if (platform) {
-        updatedTags.push(`platform:${platform}`)
+        updatedTags.push(`platform:${platform}`);
       }
-      
+
       // Update content and tags in store
-      updateDraft(selectedDraft.id, { 
+      updateDraft(selectedDraft.id, {
         content,
-        tags: updatedTags 
-      })
-      
+        tags: updatedTags,
+      });
+
       // Confirm the draft (this adds 'confirmed' tag if not present)
-      confirmDraft(selectedDraft.id)
-      
+      confirmDraft(selectedDraft.id);
+
       // Store the confirmed draft ID for scheduling prompt
-      setConfirmedDraftId(selectedDraft.id)
-      
+      setConfirmedDraftId(selectedDraft.id);
+
       // Clear selection (confirmed drafts are removed from inbox view)
-      selectDraft(null)
-      
+      selectDraft(null);
+
       // Show "Schedule now?" prompt
-      setShowSchedulePrompt(true)
-      
-      showToast.success('Confirmed', 'Ready for scheduling')
+      setShowSchedulePrompt(true);
+
+      showToast.success("Confirmed", "Ready for scheduling");
     } catch (error) {
-      console.error('Confirm failed:', error)
-      showToast.error('Failed', 'Could not confirm draft')
+      console.error("Confirm failed:", error);
+      showToast.error("Failed", "Could not confirm draft");
     }
-  }
+  };
 
   const handlePostNow = async () => {
     if (!selectedDraft?.content?.trim()) {
-      showToast.warning('Content Required', 'Please add content before posting.')
-      return
+      showToast.warning(
+        "Content Required",
+        "Please add content before posting.",
+      );
+      return;
     }
 
-    setPosting(true)
+    setPosting(true);
     try {
-      await platformsApi.publish(postingPlatform, selectedDraft.content)
-      showToast.success('Posted', `Post published to ${postingPlatform === 'twitter' ? 'Twitter/X' : 'LinkedIn'} successfully!`)
-      setShowPostNowDialog(false)
+      await platformsApi.publish(postingPlatform, selectedDraft.content);
+      showToast.success(
+        "Posted",
+        `Post published to ${postingPlatform === "twitter" ? "Twitter/X" : "LinkedIn"} successfully!`,
+      );
+      setShowPostNowDialog(false);
       // Optionally clear the draft after posting, or keep it for reference
       // setSelectedDraft(null)
     } catch (error) {
-      console.error('Failed to post:', error)
-      showToast.error('Post Failed', error.response?.data?.detail || 'Failed to post.')
+      console.error("Failed to post:", error);
+      showToast.error(
+        "Post Failed",
+        error.response?.data?.detail || "Failed to post.",
+      );
     } finally {
-      setPosting(false)
+      setPosting(false);
     }
-  }
+  };
 
   const filteredDrafts = drafts
     .filter((draft) => {
       // Exclude confirmed drafts from inbox
-      const tags = draft.tags || []
-      const isConfirmed = tags.includes('confirmed')
-      if (isConfirmed) return false
-      
+      const tags = draft.tags || [];
+      const isConfirmed = tags.includes("confirmed");
+      if (isConfirmed) return false;
+
       // Filter by search query if provided
       if (searchQuery) {
-        const query = searchQuery.toLowerCase()
-        return draft.content?.toLowerCase().includes(query)
+        const query = searchQuery.toLowerCase();
+        return draft.content?.toLowerCase().includes(query);
       }
-      
-      return true
+
+      return true;
     })
     .sort((a, b) => {
-    if (sortBy === 'oldest') {
-      return new Date(a.created_at) - new Date(b.created_at)
-    } else if (sortBy === 'alphabetical') {
-      return (a.content || '').localeCompare(b.content || '')
-    } else {
-      // 'newest' - default
-      return new Date(b.created_at) - new Date(a.created_at)
-    }
-  })
+      if (sortBy === "oldest") {
+        return new Date(a.created_at) - new Date(b.created_at);
+      } else if (sortBy === "alphabetical") {
+        return (a.content || "").localeCompare(b.content || "");
+      } else {
+        // 'newest' - default
+        return new Date(b.created_at) - new Date(a.created_at);
+      }
+    });
 
   const formatDate = (dateString) => {
-    if (!dateString) return ''
+    if (!dateString) return "";
     try {
-      const date = new Date(dateString)
-      const now = new Date()
-      const diffMs = now - date
-      const diffMins = Math.floor(diffMs / 60000)
-      const diffHours = Math.floor(diffMs / 3600000)
-      const diffDays = Math.floor(diffMs / 86400000)
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
 
-      if (diffMins < 1) return 'Just now'
-      if (diffMins < 60) return `${diffMins}m ago`
-      if (diffHours < 24) return `${diffHours}h ago`
-      if (diffDays < 7) return `${diffDays}d ago`
-      return date.toLocaleDateString()
+      if (diffMins < 1) return "Just now";
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays < 7) return `${diffDays}d ago`;
+      return date.toLocaleDateString();
     } catch {
-      return ''
+      return "";
     }
-  }
+  };
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -300,8 +386,33 @@ export default function Inbox() {
             </div>
           </div>
 
-          {/* Right: New Draft Button */}
-          <div className="flex items-center shrink-0">
+          {/* Right: Start AI + New Draft Buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleStartAi}
+              disabled={aiConnecting || healthStatus.loading}
+              className="h-9 px-3 gap-2 rounded-md flex items-center bg-muted/60 border border-border hover:bg-muted hover:border-border/80 transition-colors text-foreground text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              title={
+                healthStatus.isHealthy
+                  ? "AI Ready - Click to generate"
+                  : "Start AI"
+              }
+            >
+              {aiConnecting || healthStatus.loading ? (
+                <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+              ) : (
+                <div
+                  className={`h-2 w-2 rounded-full ${getAiStatusColor()} shrink-0`}
+                />
+              )}
+              <span className="hidden sm:inline">
+                {aiConnecting
+                  ? "Connecting..."
+                  : healthStatus.isHealthy
+                    ? "AI Ready"
+                    : "Start AI"}
+              </span>
+            </button>
             <Button
               onClick={handleCreateNew}
               className="h-9 px-3 gap-2 bg-green-700 hover:bg-green-800 text-white"
@@ -318,7 +429,10 @@ export default function Inbox() {
       <div className="flex flex-1 overflow-hidden min-h-0">
         {/* Drafts Sidebar */}
         <div className="w-64 sm:w-64 md:w-64 border-r bg-muted/30 flex flex-col h-full min-h-0 flex-shrink-0">
-          <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <div
+            className="flex-1 overflow-y-auto scrollbar-thin min-h-0"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          >
             <div className="p-4">
               {loading ? (
                 <div className="flex items-center justify-center py-12 text-muted-foreground">
@@ -330,7 +444,7 @@ export default function Inbox() {
                     <FileText className="h-8 w-8 text-muted-foreground" />
                   </div>
                   <h3 className="text-sm font-semibold mb-1">
-                    {searchQuery ? 'No drafts found' : 'No drafts yet'}
+                    {searchQuery ? "No drafts found" : "No drafts yet"}
                   </h3>
                   {!searchQuery && (
                     <>
@@ -362,24 +476,28 @@ export default function Inbox() {
                       <SelectContent>
                         <SelectItem value="newest">Newest First</SelectItem>
                         <SelectItem value="oldest">Oldest First</SelectItem>
-                        <SelectItem value="alphabetical">Alphabetical</SelectItem>
+                        <SelectItem value="alphabetical">
+                          Alphabetical
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   {filteredDrafts.map((draft) => {
-                    const isActive = selectedDraft?.id === draft.id
-                    const preview = getPreviewText(draft.content || '')
-                    const timeAgo = formatDate(draft.created_at)
-                    const hasPrompt = draft.prompt && draft.prompt.trim().length > 0
-                    const draftPlatform = getPlatformFromTags(draft.tags)
-                    
+                    const isActive = selectedDraft?.id === draft.id;
+                    const preview = getPreviewText(draft.content || "");
+                    const timeAgo = formatDate(draft.created_at);
+                    const hasPrompt =
+                      draft.prompt && draft.prompt.trim().length > 0;
+                    const draftPlatform = getPlatformFromTags(draft.tags);
+
                     return (
                       <Card
                         key={draft.id}
                         onClick={() => selectDraft(draft.id)}
                         className={cn(
                           "group cursor-pointer transition-all border-border/80 hover:border-border hover:shadow-sm",
-                          isActive && "border-primary/80 shadow-sm bg-accent/50"
+                          isActive &&
+                            "border-primary/80 shadow-sm bg-accent/50",
                         )}
                       >
                         <CardContent className="p-3">
@@ -387,52 +505,63 @@ export default function Inbox() {
                           <div className="flex items-center justify-between mb-1.5">
                             <div className="flex items-center gap-1.5">
                               {hasPrompt && (
-                                <Badge variant="secondary" className="h-3.5 px-1 text-[8px] gap-0.5 opacity-60">
+                                <Badge
+                                  variant="secondary"
+                                  className="h-3.5 px-1 text-[8px] gap-0.5 opacity-60"
+                                >
                                   <Sparkles className="h-2 w-2" />
                                 </Badge>
                               )}
                               {draftPlatform && (
-                              <div className="flex items-center">
-                                {draftPlatform === 'twitter' ? (
-                                  <svg
-                                    role="img"
-                                    viewBox="0 0 24 24"
-                                    className="h-2.5 w-2.5 shrink-0 fill-current text-black dark:text-white"
-                                    preserveAspectRatio="xMidYMid meet"
-                                  >
-                                    <path d={simpleIcons.siX.path} />
-                                  </svg>
-                                ) : draftPlatform === 'linkedin' ? (
-                                  <svg
-                                    role="img"
-                                    viewBox="0 0 24 24"
-                                    className="h-3 w-3 shrink-0 fill-current text-[#0A66C2] dark:text-[#71B7FB]"
-                                    preserveAspectRatio="xMidYMid meet"
-                                  >
-                                    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-                                  </svg>
-                                ) : null}
-                              </div>
-                            )}
+                                <div className="flex items-center">
+                                  {draftPlatform === "twitter" ? (
+                                    <svg
+                                      role="img"
+                                      viewBox="0 0 24 24"
+                                      className="h-2.5 w-2.5 shrink-0 fill-current text-black dark:text-white"
+                                      preserveAspectRatio="xMidYMid meet"
+                                    >
+                                      <path d={simpleIcons.siX.path} />
+                                    </svg>
+                                  ) : draftPlatform === "linkedin" ? (
+                                    <svg
+                                      role="img"
+                                      viewBox="0 0 24 24"
+                                      className="h-3 w-3 shrink-0 fill-current text-[#0A66C2] dark:text-[#71B7FB]"
+                                      preserveAspectRatio="xMidYMid meet"
+                                    >
+                                      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+                                    </svg>
+                                  ) : null}
+                                </div>
+                              )}
+                            </div>
+                            <span className="text-[9px] text-muted-foreground font-medium">
+                              {timeAgo}
+                            </span>
                           </div>
-                          <span className="text-[9px] text-muted-foreground font-medium">
-                            {timeAgo}
-                          </span>
-                        </div>
-                        
-                        {/* Preview content (cleaned, matching preview pane) - single line */}
-                        <p className={cn(
-                          "text-xs leading-snug line-clamp-1 font-medium",
-                          isActive ? "text-foreground" : "text-muted-foreground",
-                          "group-hover:text-foreground transition-colors"
-                        )}>
-                          {preview || <span className="italic opacity-50">No content</span>}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-              </div>
+
+                          {/* Preview content (cleaned, matching preview pane) - single line */}
+                          <p
+                            className={cn(
+                              "text-xs leading-snug line-clamp-1 font-medium",
+                              isActive
+                                ? "text-foreground"
+                                : "text-muted-foreground",
+                              "group-hover:text-foreground transition-colors",
+                            )}
+                          >
+                            {preview || (
+                              <span className="italic opacity-50">
+                                No content
+                              </span>
+                            )}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
@@ -449,6 +578,8 @@ export default function Inbox() {
               onConfirm={handleConfirm}
               autoSave={true}
               showActions={true}
+              triggerAiPrompt={triggerAiPrompt}
+              onAiPromptTriggered={() => setTriggerAiPrompt(false)}
             />
           ) : (
             <div className="flex h-full items-center justify-center bg-muted/20">
@@ -474,7 +605,8 @@ export default function Inbox() {
           <DialogHeader>
             <DialogTitle>Discard Draft</DialogTitle>
             <DialogDescription>
-              Are you sure you want to discard this draft? This action cannot be undone.
+              Are you sure you want to discard this draft? This action cannot be
+              undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -485,13 +617,13 @@ export default function Inbox() {
             >
               Cancel
             </Button>
-            <Button 
-              variant="default" 
+            <Button
+              variant="default"
               onClick={handleDelete}
               disabled={deleting}
               className="bg-red-700 hover:bg-red-800 text-white"
             >
-              {deleting ? 'Discarding...' : 'Discard'}
+              {deleting ? "Discarding..." : "Discard"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -511,24 +643,24 @@ export default function Inbox() {
               <label className="block text-sm font-medium mb-2">Platform</label>
               <div className="flex gap-4">
                 <button
-                  onClick={() => setPostingPlatform('twitter')}
+                  onClick={() => setPostingPlatform("twitter")}
                   className={cn(
                     "flex-1 flex items-center justify-center p-4 rounded-lg border transition-colors",
-                    postingPlatform === 'twitter'
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-input hover:bg-accent'
+                    postingPlatform === "twitter"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-input hover:bg-accent",
                   )}
                 >
                   <Twitter className="mr-2 h-5 w-5" />
                   Twitter / X
                 </button>
                 <button
-                  onClick={() => setPostingPlatform('linkedin')}
+                  onClick={() => setPostingPlatform("linkedin")}
                   className={cn(
                     "flex-1 flex items-center justify-center p-4 rounded-lg border transition-colors",
-                    postingPlatform === 'linkedin'
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-input hover:bg-accent'
+                    postingPlatform === "linkedin"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-input hover:bg-accent",
                   )}
                 >
                   <Linkedin className="mr-2 h-5 w-5" />
@@ -540,7 +672,11 @@ export default function Inbox() {
               <div className="rounded-lg border bg-muted/30 p-4">
                 <div className="text-sm font-medium mb-2">Content Preview</div>
                 <div className="text-sm whitespace-pre-wrap text-foreground/90 max-h-48 overflow-y-auto">
-                  {selectedDraft.content || <span className="text-muted-foreground italic">No content</span>}
+                  {selectedDraft.content || (
+                    <span className="text-muted-foreground italic">
+                      No content
+                    </span>
+                  )}
                 </div>
               </div>
             )}
@@ -586,19 +722,19 @@ export default function Inbox() {
             <Button
               variant="outline"
               onClick={() => {
-                setShowSchedulePrompt(false)
-                setConfirmedDraftId(null)
+                setShowSchedulePrompt(false);
+                setConfirmedDraftId(null);
               }}
             >
               Later
             </Button>
             <Button
               onClick={() => {
-                setShowSchedulePrompt(false)
+                setShowSchedulePrompt(false);
                 if (confirmedDraftId) {
-                  navigate(`/schedule?draftId=${confirmedDraftId}`)
+                  navigate(`/schedule?draftId=${confirmedDraftId}`);
                 }
-                setConfirmedDraftId(null)
+                setConfirmedDraftId(null);
               }}
             >
               Schedule Now
@@ -607,5 +743,5 @@ export default function Inbox() {
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }
