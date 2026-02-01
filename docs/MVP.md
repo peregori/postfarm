@@ -93,7 +93,7 @@ Solo content creators, indie hackers, and small marketing teams who want a simpl
 - [x] 20. Update acceptance criteria checkboxes when OAuth works
 
 ### Next (Phase 8: Real Posting Engine)
-- [ ] 6. Background job system (APScheduler or Celery)
+- [x] 6. Background job system (APScheduler or Celery)
 - [ ] 7. Scheduled job execution at exact times
 - [ ] 8. Twitter API: post tweet at scheduled time
 - [ ] 9. LinkedIn API: post update at scheduled time
