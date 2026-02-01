@@ -13,6 +13,7 @@ import Inbox from "./pages/Inbox";
 import SignInPage from "./pages/SignIn";
 import SignUpPage from "./pages/SignUp";
 import ProfilePage from "./pages/Profile";
+import OAuthCallback from "./pages/OAuthCallback";
 import { Toaster } from "./components/ui/toaster";
 import { HealthProvider } from "./contexts/HealthContext";
 import { HotkeysProvider } from "./contexts/HotkeysContext";
@@ -52,6 +53,16 @@ function App() {
                   {/* Public auth routes - no Layout wrapper */}
                   <Route path="/sign-in/*" element={<SignInPage />} />
                   <Route path="/sign-up/*" element={<SignUpPage />} />
+
+                  {/* OAuth callback routes - protected but no Layout */}
+                  <Route
+                    path="/oauth/:platform/callback"
+                    element={
+                      <ProtectedRoute>
+                        <OAuthCallback />
+                      </ProtectedRoute>
+                    }
+                  />
 
                   {/* Protected routes - wrapped in Layout */}
                   <Route

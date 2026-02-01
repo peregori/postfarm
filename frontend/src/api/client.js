@@ -296,4 +296,53 @@ export const exportApi = {
   },
 };
 
+// OAuth API
+export const oauthApi = {
+  /**
+   * Initiate OAuth flow for a platform
+   * @param {string} platform - 'twitter' or 'linkedin'
+   * @returns {Promise<{state: string, auth_url: string}>}
+   */
+  initiate: async (platform) => {
+    const response = await client.post("/oauth/initiate", { platform });
+    return response.data;
+  },
+
+  /**
+   * Handle OAuth callback with authorization code
+   * @param {string} code - Authorization code from OAuth provider
+   * @param {string} state - State parameter for CSRF protection
+   * @param {string} platform - 'twitter' or 'linkedin'
+   * @returns {Promise<{success: boolean, platform: string, message: string}>}
+   */
+  callback: async (code, state, platform) => {
+    const response = await client.post("/oauth/callback", {
+      code,
+      state,
+      platform,
+    });
+    return response.data;
+  },
+
+  /**
+   * Disconnect a platform (delete OAuth tokens)
+   * @param {string} platform - 'twitter' or 'linkedin'
+   * @returns {Promise<{success: boolean, platform: string, message: string}>}
+   */
+  disconnect: async (platform) => {
+    const response = await client.delete(`/oauth/${platform}`);
+    return response.data;
+  },
+
+  /**
+   * Get OAuth connection status for a platform
+   * @param {string} platform - 'twitter' or 'linkedin'
+   * @returns {Promise<{connected: boolean, platform: string, expires_at: string|null}>}
+   */
+  getStatus: async (platform) => {
+    const response = await client.get(`/oauth/${platform}/status`);
+    return response.data;
+  },
+};
+
 export default client;

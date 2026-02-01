@@ -25,13 +25,13 @@ Solo content creators, indie hackers, and small marketing teams who want a simpl
 ## Acceptance criteria (testable)
 - [ ] User can create, edit, confirm, and delete drafts
 - [ ] User can schedule confirmed drafts to specific date/time
-- [ ] User can connect Twitter account via OAuth
-- [ ] User can connect LinkedIn account via OAuth
+- [x] User can connect Twitter account via OAuth
+- [x] User can connect LinkedIn account via OAuth
 - [ ] Scheduled post publishes to Twitter at the scheduled time
 - [ ] Scheduled post publishes to LinkedIn at the scheduled time
 - [ ] User sees clear status: pending → publishing → published / failed
 - [ ] Failed posts show error reason + retry option
-- [ ] `./scripts/verify.sh` passes on main branch
+- [x] `./scripts/verify.sh` passes on main branch
 - [ ] Testing: manual QA checklist used per release
 
 ## Manual QA checklist
@@ -64,12 +64,33 @@ Solo content creators, indie hackers, and small marketing teams who want a simpl
 - [x] Keyboard shortcuts + UX polish
 - [x] Clerk authentication (sign up, sign in, protected routes)
 
-### In Progress (Phase 8: Platform Connections)
-- [x] 1. Twitter OAuth 2.0 flow (request scopes, store tokens)
-- [ ] 2. LinkedIn OAuth flow (store tokens securely)
-- [ ] 3. Settings: connection status indicators + disconnect buttons
-- [ ] 4. Token refresh logic for expired tokens
-- [ ] 5. Handle OAuth errors gracefully (UI feedback)
+### Done (Phase 8: OAuth 2.0 Implementation) ✅
+
+#### Backend
+- [x] 1. PKCE utilities (RFC 7636 compliant) - `backend/app/utils/pkce.py`
+- [x] 2. OAuthStateRepository (database-backed state storage) - `backend/app/database_supabase.py`
+- [x] 3. OAuth router with real PKCE for Twitter - `backend/app/routers/oauth.py`
+- [x] 4. LinkedIn OAuth support (no PKCE) - `backend/app/routers/oauth.py`
+- [x] 5. APScheduler persistence (SQLAlchemy jobstore) - `backend/app/services/scheduler_service.py`
+- [x] 6. OAuth state cleanup task (runs every 5 min) - `backend/app/services/scheduler_service.py`
+- [x] 7. Database migration for oauth_states table - `backend/migrations/002_oauth_states.sql`
+- [x] 8. Database migration for user_secrets table - `backend/migrations/001_user_secrets.sql`
+- [x] 9. Test suite (PKCE, OAuth router, state repo) - `backend/tests/`
+- [x] 10. Documentation (.env.example, OAUTH_SETUP.md)
+
+#### Frontend (Complete ✅)
+- [x] 11. OAuth API client methods - `frontend/src/api/client.js`
+- [x] 12. OAuth popup service - `frontend/src/services/oauthService.js`
+- [x] 13. OAuth callback page - `frontend/src/pages/OAuthCallback.jsx`
+- [x] 14. OAuth callback routes - `frontend/src/App.jsx`
+- [x] 15. Settings page OAuth UI integration - `frontend/src/pages/Settings.jsx`
+
+#### Testing & Deployment (Complete ✅)
+- [x] 16. Run database migrations in Supabase (001_user_secrets.sql, 002_oauth_states.sql)
+- [x] 17. Set OAuth environment variables (TWITTER_CLIENT_ID, LINKEDIN_CLIENT_ID, etc.)
+- [x] 18. Manual OAuth flow testing (Twitter + LinkedIn end-to-end)
+- [x] 19. Run quality checks (`./scripts/verify.sh`)
+- [x] 20. Update acceptance criteria checkboxes when OAuth works
 
 ### Next (Phase 8: Real Posting Engine)
 - [ ] 6. Background job system (APScheduler or Celery)

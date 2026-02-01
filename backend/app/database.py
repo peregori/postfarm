@@ -22,6 +22,26 @@ def get_db():
         db.close()
 
 def init_db():
-    from app.models import Draft, ScheduledPost, PlatformConfig, AIProviderConfig
+    from app.models import Draft, ScheduledPost, PlatformConfig, AIProviderConfig, PlatformType
     Base.metadata.create_all(bind=engine)
+
+    # Seed default platforms if they don't exist
+    db = SessionLocal()
+    try:
+        from sqlalchemy import select
+        # Check if platforms exist
+        result = db.execute(select(PlatformConfig))
+        existing = result.scalars().all()
+
+        if not existing:
+            # Create default Twitter and LinkedIn platforms
+            platforms = [
+                PlatformConfig(platform=PlatformType.TWITTER, is_active=False),
+                PlatformConfig(platform=PlatformType.LINKEDIN, is_active=False),
+            ]
+            db.add_all(platforms)
+            db.commit()
+            print("✅ Seeded default platforms: Twitter, LinkedIn")
+    finally:
+        db.close()
 

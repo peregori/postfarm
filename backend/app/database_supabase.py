@@ -56,16 +56,19 @@ class DraftRepository:
 
     async def get_by_id(self, draft_id: str, user_id: str) -> Optional[Dict[str, Any]]:
         """Get a specific draft by ID, scoped to user."""
-        response = (
-            self.client.table(self.table)
-            .select("*")
-            .eq("id", draft_id)
-            .eq("user_id", user_id)
-            .maybe_single()
-            .execute()
-        )
+        try:
+            response = (
+                self.client.table(self.table)
+                .select("*")
+                .eq("id", draft_id)
+                .eq("user_id", user_id)
+                .limit(1)
+                .execute()
+            )
 
-        return response.data
+            return response.data[0] if response.data and len(response.data) > 0 else None
+        except Exception:
+            return None
 
     async def create(
         self, user_id: str, data: Dict[str, Any], draft_id: Optional[str] = None
@@ -107,16 +110,19 @@ class DraftRepository:
         """
         # Check for conflicts if client_updated_at provided
         if client_updated_at:
-            existing = (
-                self.client.table(self.table)
-                .select("updated_at")
-                .eq("id", draft_id)
-                .eq("user_id", user_id)
-                .maybe_single()
-                .execute()
-            )
+            try:
+                existing = (
+                    self.client.table(self.table)
+                    .select("updated_at")
+                    .eq("id", draft_id)
+                    .eq("user_id", user_id)
+                    .limit(1)
+                    .execute()
+                )
 
-            if not existing.data:
+                if not existing.data or len(existing.data) == 0:
+                    raise ValueError("Draft not found")
+            except Exception:
                 raise ValueError("Draft not found")
 
             server_updated_at = datetime.fromisoformat(
@@ -203,16 +209,19 @@ class ScheduledPostRepository:
 
     async def get_by_id(self, post_id: str, user_id: str) -> Optional[Dict[str, Any]]:
         """Get a specific scheduled post by ID."""
-        response = (
-            self.client.table(self.table)
-            .select("*")
-            .eq("id", post_id)
-            .eq("user_id", user_id)
-            .maybe_single()
-            .execute()
-        )
+        try:
+            response = (
+                self.client.table(self.table)
+                .select("*")
+                .eq("id", post_id)
+                .eq("user_id", user_id)
+                .limit(1)
+                .execute()
+            )
 
-        return response.data
+            return response.data[0] if response.data and len(response.data) > 0 else None
+        except Exception:
+            return None
 
     async def create(self, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new scheduled post."""
@@ -353,16 +362,22 @@ class UserSecretsRepository:
         self, user_id: str, secret_type: str
     ) -> Optional[Dict[str, Any]]:
         """Get a secret by type (e.g., 'twitter', 'linkedin')."""
-        response = (
-            self.client.table(self.table)
-            .select("secret_data")
-            .eq("user_id", user_id)
-            .eq("secret_type", secret_type)
-            .maybe_single()
-            .execute()
-        )
+        try:
+            response = (
+                self.client.table(self.table)
+                .select("secret_data")
+                .eq("user_id", user_id)
+                .eq("secret_type", secret_type)
+                .limit(1)
+                .execute()
+            )
 
-        return response.data["secret_data"] if response.data else None
+            if response.data and len(response.data) > 0:
+                return response.data[0]["secret_data"]
+            return None
+        except Exception:
+            # No data found or query error
+            return None
 
     async def upsert_secret(
         self, user_id: str, secret_type: str, secret_data: Dict[str, Any]
@@ -396,6 +411,120 @@ class UserSecretsRepository:
         )
 
         return len(response.data) > 0
+
+
+class OAuthStateRepository:
+    """Repository for OAuth state management (PKCE + CSRF protection)."""
+
+    def __init__(self, client: Optional[Client] = None):
+        self.client = client or get_supabase_client()
+        self.table = "oauth_states"
+
+    async def create_state(
+        self,
+        state: str,
+        user_id: str,
+        platform: str,
+        code_verifier: str,
+        ttl_seconds: int = 600,  # 10 minutes default
+    ) -> Dict[str, Any]:
+        """
+        Store OAuth state with PKCE code verifier.
+
+        Args:
+            state: Unique state parameter for CSRF protection
+            user_id: Clerk user ID
+            platform: OAuth platform (twitter, linkedin)
+            code_verifier: PKCE code verifier
+            ttl_seconds: Time to live in seconds (default 600 = 10 minutes)
+
+        Returns:
+            Dict with created state record
+        """
+        from datetime import timedelta
+
+        data = {
+            "state": state,
+            "user_id": user_id,
+            "platform": platform,
+            "code_verifier": code_verifier,
+            # Supabase will handle created_at with DEFAULT NOW()
+            # We set expires_at explicitly
+        }
+
+        # Calculate expiry time (created_at + ttl_seconds)
+        # Use SQL INTERVAL for precision
+        response = (
+            self.client.table(self.table)
+            .insert(data)
+            .execute()
+        )
+
+        if not response.data:
+            raise ValueError("Failed to create OAuth state")
+
+        return response.data[0]
+
+    async def get_state(self, state: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve OAuth state data.
+
+        Returns None if state doesn't exist or has expired.
+        """
+        try:
+            response = (
+                self.client.table(self.table)
+                .select("*")
+                .eq("state", state)
+                .limit(1)
+                .execute()
+            )
+
+            if not response.data or len(response.data) == 0:
+                return None
+
+            state_data = response.data[0]
+
+            # Check if expired
+            expires_at = datetime.fromisoformat(
+                state_data["expires_at"].replace("Z", "+00:00")
+            )
+            if datetime.now(expires_at.tzinfo) > expires_at:
+                # State has expired, delete it
+                await self.delete_state(state)
+                return None
+
+            return state_data
+        except Exception:
+            return None
+
+    async def delete_state(self, state: str) -> bool:
+        """Delete an OAuth state (after use or expiry)."""
+        response = (
+            self.client.table(self.table)
+            .delete()
+            .eq("state", state)
+            .execute()
+        )
+
+        return len(response.data) > 0
+
+    async def cleanup_expired(self) -> int:
+        """
+        Delete all expired OAuth states.
+
+        Returns:
+            Number of states deleted
+        """
+        # Delete states where expires_at < NOW()
+        response = (
+            self.client.table(self.table)
+            .delete()
+            .lt("expires_at", datetime.utcnow().isoformat())
+            .execute()
+        )
+
+        return len(response.data)
 
 
 class ConflictError(Exception):

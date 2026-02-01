@@ -1,21 +1,36 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from datetime import datetime, timezone, timedelta
-import pytz
 import asyncio
 from app.services.platform_service import PlatformService
 from app.database import SessionLocal
 from app.models import ScheduledPost, PostStatus
 from sqlalchemy import select
+from app.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
 
+
+# Standalone function for OAuth cleanup (can be pickled by APScheduler)
+async def cleanup_oauth_states_job():
+    """Clean up expired OAuth states - standalone function for scheduler"""
+    try:
+        from app.routers.oauth import cleanup_expired_oauth_states
+        deleted_count = await cleanup_expired_oauth_states()
+        if deleted_count > 0:
+            logger.info(f"Cleaned up {deleted_count} expired OAuth states")
+    except Exception as e:
+        logger.error(f"Failed to cleanup OAuth states: {e}")
+
+
 class SchedulerService:
     """Service for managing scheduled posts"""
-    
+
     def __init__(self):
+        # Use memory jobstore to avoid serialization issues with instance methods
+        # Jobs are reloaded from database on startup via _load_scheduled_posts()
         self.scheduler = AsyncIOScheduler()
         self.platform_service = PlatformService()
         self.is_running = False
@@ -30,6 +45,9 @@ class SchedulerService:
             logger.info("Scheduler started")
             # Load existing scheduled posts
             asyncio.create_task(self._load_scheduled_posts())
+            # Schedule periodic OAuth state cleanup (every 5 minutes)
+            if settings.USE_SUPABASE:
+                self._schedule_oauth_cleanup()
     
     def stop(self):
         """Stop the scheduler"""
@@ -139,6 +157,16 @@ class SchedulerService:
             logger.info(f"Unscheduled post {post_id}")
         except:
             pass  # Job might not exist
+
+    def _schedule_oauth_cleanup(self):
+        """Schedule periodic cleanup of expired OAuth states"""
+        self.scheduler.add_job(
+            cleanup_oauth_states_job,
+            trigger=IntervalTrigger(minutes=5),
+            id="oauth_state_cleanup",
+            replace_existing=True
+        )
+        logger.info("Scheduled OAuth state cleanup (every 5 minutes)")
 
 # Global scheduler instance
 scheduler_service = SchedulerService()

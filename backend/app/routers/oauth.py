@@ -14,11 +14,9 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.middleware.auth import ClerkUser, get_current_user
+from app.utils.pkce import generate_code_verifier, generate_code_challenge
 
 router = APIRouter(prefix="/oauth", tags=["oauth"])
-
-# In-memory state storage (in production, use Redis or database)
-_oauth_states = {}
 
 
 class OAuthStateCreate(BaseModel):
@@ -56,15 +54,28 @@ async def initiate_oauth(
     if platform not in ["twitter", "linkedin"]:
         raise HTTPException(status_code=400, detail="Unsupported platform")
 
-    # Generate secure random state
-    state = secrets.token_urlsafe(32)
+    if not settings.USE_SUPABASE:
+        raise HTTPException(
+            status_code=501,
+            detail="OAuth requires Supabase for state storage",
+        )
 
-    # Store state with user_id and timestamp (expires in 10 minutes)
-    _oauth_states[state] = {
-        "user_id": user.user_id,
-        "platform": platform,
-        "created_at": datetime.utcnow(),
-    }
+    # Generate secure random state and PKCE verifier
+    state = secrets.token_urlsafe(32)
+    code_verifier = generate_code_verifier()
+    code_challenge = generate_code_challenge(code_verifier)
+
+    # Store state with PKCE verifier in database
+    from app.database_supabase import OAuthStateRepository
+
+    repo = OAuthStateRepository()
+    await repo.create_state(
+        state=state,
+        user_id=user.user_id,
+        platform=platform,
+        code_verifier=code_verifier,
+        ttl_seconds=600,  # 10 minutes
+    )
 
     # Build authorization URL
     if platform == "twitter":
@@ -76,19 +87,19 @@ async def initiate_oauth(
             "redirect_uri": settings.TWITTER_REDIRECT_URI,
             "scope": "tweet.read tweet.write users.read offline.access",
             "state": state,
-            "code_challenge": "challenge",  # TODO: Implement PKCE properly
-            "code_challenge_method": "plain",
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
         }
         auth_url = "https://twitter.com/i/oauth2/authorize?" + urlencode(auth_params)
 
     elif platform == "linkedin":
-        # LinkedIn OAuth 2.0
-        # Scopes: w_member_social, r_liteprofile
+        # LinkedIn OAuth 2.0 (no PKCE support)
+        # Scopes: openid, profile (replaces deprecated r_liteprofile), w_member_social
         auth_params = {
             "response_type": "code",
             "client_id": settings.LINKEDIN_CLIENT_ID,
             "redirect_uri": settings.LINKEDIN_REDIRECT_URI,
-            "scope": "w_member_social r_liteprofile",
+            "scope": "openid profile w_member_social",
             "state": state,
         }
         auth_url = "https://www.linkedin.com/oauth/v2/authorization?" + urlencode(
@@ -113,26 +124,37 @@ async def oauth_callback(
     code = request.code
     state = request.state
 
-    # Verify state
-    if state not in _oauth_states:
+    if not settings.USE_SUPABASE:
+        raise HTTPException(
+            status_code=501,
+            detail="OAuth requires Supabase",
+        )
+
+    # Retrieve and verify state from database
+    from app.database_supabase import OAuthStateRepository
+
+    repo = OAuthStateRepository()
+    state_data = await repo.get_state(state)
+
+    if not state_data:
         raise HTTPException(status_code=400, detail="Invalid or expired state")
 
-    state_data = _oauth_states[state]
     if state_data["user_id"] != user.user_id:
         raise HTTPException(status_code=403, detail="State mismatch")
 
-    # Check expiration (10 minutes)
-    if datetime.utcnow() - state_data["created_at"] > timedelta(minutes=10):
-        del _oauth_states[state]
-        raise HTTPException(status_code=400, detail="State expired")
+    if state_data["platform"] != platform:
+        raise HTTPException(status_code=400, detail="Platform mismatch")
 
-    # Remove state from storage
-    del _oauth_states[state]
+    # Get PKCE code verifier
+    code_verifier = state_data["code_verifier"]
+
+    # Delete state (one-time use)
+    await repo.delete_state(state)
 
     # Exchange code for token
     try:
         if platform == "twitter":
-            token_data = await _exchange_twitter_code(code)
+            token_data = await _exchange_twitter_code(code, code_verifier)
         elif platform == "linkedin":
             token_data = await _exchange_linkedin_code(code)
         else:
@@ -226,7 +248,7 @@ async def get_oauth_status(
 # Helper functions
 
 
-async def _exchange_twitter_code(code: str) -> dict:
+async def _exchange_twitter_code(code: str, code_verifier: str) -> dict:
     """
     Exchange Twitter authorization code for access token.
     Returns: {access_token, refresh_token, expires_in, scope}
@@ -241,7 +263,7 @@ async def _exchange_twitter_code(code: str) -> dict:
                 "grant_type": "authorization_code",
                 "client_id": settings.TWITTER_CLIENT_ID,
                 "redirect_uri": settings.TWITTER_REDIRECT_URI,
-                "code_verifier": "challenge",  # TODO: Use real PKCE verifier
+                "code_verifier": code_verifier,
             },
             auth=(settings.TWITTER_CLIENT_ID, settings.TWITTER_CLIENT_SECRET),
         )
@@ -346,3 +368,18 @@ async def _refresh_twitter_token(refresh_token: str) -> dict:
         )
         response.raise_for_status()
         return response.json()
+
+
+async def cleanup_expired_oauth_states():
+    """
+    Background task to clean up expired OAuth states.
+    Should be called periodically (e.g., every 5 minutes).
+    """
+    if not settings.USE_SUPABASE:
+        return
+
+    from app.database_supabase import OAuthStateRepository
+
+    repo = OAuthStateRepository()
+    deleted_count = await repo.cleanup_expired()
+    return deleted_count

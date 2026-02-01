@@ -18,12 +18,15 @@ import {
   Download,
   Cloud,
 } from "lucide-react";
+import * as simpleIcons from "simple-icons";
 import {
   platformsApi,
   modelsApi,
   providersApi,
   exportApi,
+  oauthApi,
 } from "../api/client";
+import { startOAuthFlow } from "../services/oauthService";
 import { useSync } from "../contexts/SyncContext";
 import {
   Card,
@@ -73,6 +76,12 @@ export default function Settings() {
   const [currentProvider, setCurrentProvider] = useState(null);
   const [providerConfigs, setProviderConfigs] = useState({});
   const [testingProvider, setTestingProvider] = useState(null);
+
+  // OAuth state
+  const [oauthStatus, setOauthStatus] = useState({
+    twitter: { connected: false, loading: true },
+    linkedin: { connected: false, loading: true },
+  });
 
   // Theme state
   const theme = useUIStore((state) => state.theme);
@@ -160,10 +169,31 @@ export default function Settings() {
     loadPlatforms();
     loadModels();
     loadProviders();
+    checkOAuthStatus();
     // Load saved model from localStorage
     const savedModel = localStorage.getItem("llama_selected_model");
     if (savedModel) {
       setSelectedLlamaModel(savedModel);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Check for OAuth callback redirect
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("connected");
+    const error = params.get("error");
+
+    if (connected) {
+      showToast.success("Connected", `${connected} connected successfully!`);
+      // Refresh OAuth status
+      checkOAuthStatus();
+      // Clear URL params
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    if (error) {
+      showToast.error("Connection Failed", decodeURIComponent(error));
+      // Clear URL params
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, []);
 
@@ -314,6 +344,56 @@ export default function Settings() {
     }
   };
 
+  const checkOAuthStatus = async () => {
+    try {
+      const [twitterStatus, linkedinStatus] = await Promise.all([
+        oauthApi.getStatus("twitter"),
+        oauthApi.getStatus("linkedin"),
+      ]);
+      setOauthStatus({
+        twitter: { ...twitterStatus, loading: false },
+        linkedin: { ...linkedinStatus, loading: false },
+      });
+    } catch (error) {
+      console.error("Failed to check OAuth status:", error);
+      setOauthStatus({
+        twitter: { connected: false, loading: false },
+        linkedin: { connected: false, loading: false },
+      });
+    }
+  };
+
+  const handleOAuthConnect = async (platform) => {
+    try {
+      const { auth_url } = await oauthApi.initiate(platform);
+      await startOAuthFlow(auth_url, platform);
+      // Refresh status after popup closes
+      const status = await oauthApi.getStatus(platform);
+      setOauthStatus((prev) => ({
+        ...prev,
+        [platform]: { ...status, loading: false },
+      }));
+      showToast.success("Connected", `${platform} connected successfully!`);
+    } catch (error) {
+      console.error(`OAuth ${platform} failed:`, error);
+      showToast.error("Connection Failed", error.message);
+    }
+  };
+
+  const handleOAuthDisconnect = async (platform) => {
+    try {
+      await oauthApi.disconnect(platform);
+      setOauthStatus((prev) => ({
+        ...prev,
+        [platform]: { connected: false, loading: false },
+      }));
+      showToast.success("Disconnected", `${platform} disconnected`);
+    } catch (error) {
+      console.error(`OAuth disconnect ${platform} failed:`, error);
+      showToast.error("Disconnect Failed", error.message);
+    }
+  };
+
   const handleSave = async (platform) => {
     const config = platformConfigs[platform];
     if (!config) return;
@@ -435,372 +515,88 @@ export default function Settings() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-4">
+            <div className="space-y-3">
               {platforms.map((platform) => {
                 const platformName = platform.platform;
-                const isEditing = editingPlatform === platformName;
-                const config = platformConfigs[platformName] || {
-                  is_active: false,
-                };
-                const isConnected = platform.has_credentials;
-                const isActive = config.is_active && isConnected;
-                const platformIcon = platformName === "twitter" ? "🐦" : "💼";
-                const platformColors =
-                  platformName === "twitter"
-                    ? {
-                        bg: "bg-blue-500/10",
-                        border: "border-blue-500/30",
-                        text: "text-blue-600 dark:text-blue-400",
-                        hover: "hover:bg-blue-500/20",
-                      }
-                    : {
-                        bg: "bg-indigo-500/10",
-                        border: "border-indigo-500/30",
-                        text: "text-indigo-600 dark:text-indigo-400",
-                        hover: "hover:bg-indigo-500/20",
-                      };
+                const oauthConnected = oauthStatus[platformName]?.connected;
+                const oauthLoading = oauthStatus[platformName]?.loading;
+                const expiresAt = oauthStatus[platformName]?.expires_at;
+
+                // Platform icon paths (clean, no background)
+                const platformIconPath = platformName === "twitter"
+                  ? simpleIcons.siX.path
+                  : "M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z";
 
                 return (
-                  <Card
+                  <div
                     key={platformName}
                     className={cn(
-                      "transition-all duration-200",
-                      isActive &&
-                        "border-2 border-green-500/50 shadow-lg shadow-green-500/5",
-                      !isEditing && "hover:shadow-md",
+                      "flex items-center justify-between p-4 rounded-lg border transition-all",
+                      oauthConnected
+                        ? "bg-green-50/50 dark:bg-green-950/20 border-green-200 dark:border-green-900/50"
+                        : "bg-card border-border hover:border-muted-foreground/30"
                     )}
                   >
-                    <CardContent className="p-5">
-                      <div className="space-y-4">
-                        {/* Header */}
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start gap-4 flex-1">
-                            <div
-                              className={cn(
-                                "p-3 rounded-xl text-2xl",
-                                platformColors.bg,
-                                platformColors.border,
-                                "border",
-                              )}
-                            >
-                              {platformIcon}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <h3 className="text-base font-bold capitalize">
-                                  {platformName}
-                                </h3>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  {isConnected ? (
-                                    <Badge
-                                      variant="secondary"
-                                      className="bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/30"
-                                    >
-                                      <CheckCircle className="h-3 w-3 mr-1" />
-                                      Connected
-                                    </Badge>
-                                  ) : (
-                                    <Badge
-                                      variant="secondary"
-                                      className="bg-muted text-muted-foreground"
-                                    >
-                                      Not Connected
-                                    </Badge>
-                                  )}
-                                  {isActive && (
-                                    <Badge
-                                      variant="outline"
-                                      className="border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400"
-                                    >
-                                      <Power className="h-3 w-3 mr-1" />
-                                      Active
-                                    </Badge>
-                                  )}
-                                </div>
-                              </div>
-                              <p className="text-sm text-muted-foreground">
-                                {isConnected
-                                  ? isActive
-                                    ? "Ready to automatically post content"
-                                    : "Configured but posting is disabled"
-                                  : `Click "Connect" to set up ${platformName} integration`}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {!isEditing ? (
-                              <>
-                                {isConnected && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() =>
-                                      togglePlatformActive(platformName)
-                                    }
-                                    className={cn(
-                                      "transition-colors",
-                                      isActive &&
-                                        "text-green-600 dark:text-green-400 hover:text-green-700",
-                                    )}
-                                    title={
-                                      isActive
-                                        ? "Disable posting"
-                                        : "Enable posting"
-                                    }
-                                  >
-                                    <Power
-                                      className={cn(
-                                        "h-4 w-4",
-                                        isActive ? "" : "opacity-40",
-                                      )}
-                                    />
-                                  </Button>
-                                )}
-                                <Button
-                                  variant={isConnected ? "outline" : "default"}
-                                  size="sm"
-                                  onClick={() => {
-                                    if (!platformConfigs[platformName]) {
-                                      loadPlatformConfig(platformName);
-                                    }
-                                    setEditingPlatform(platformName);
-                                  }}
-                                  className="gap-2"
-                                >
-                                  {isConnected ? "Edit" : "Connect"}
-                                  {!isConnected && (
-                                    <ArrowRight className="h-4 w-4 shrink-0" />
-                                  )}
-                                </Button>
-                              </>
-                            ) : (
-                              <div className="flex gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setEditingPlatform(null);
-                                    loadPlatformConfig(platformName);
-                                  }}
-                                >
-                                  Cancel
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleSave(platformName)}
-                                >
-                                  Save Changes
-                                </Button>
-                              </div>
+                    {/* Left: Icon + Info */}
+                    <div className="flex items-center gap-4">
+                      <svg
+                        role="img"
+                        viewBox="0 0 24 24"
+                        className="h-6 w-6 fill-current text-foreground"
+                        preserveAspectRatio="xMidYMid meet"
+                      >
+                        <path d={platformIconPath} />
+                      </svg>
+                      <div>
+                        <h3 className="text-sm font-semibold capitalize">
+                          {platformName}
+                        </h3>
+                        {oauthLoading ? (
+                          <p className="text-xs text-muted-foreground">Checking status...</p>
+                        ) : oauthConnected ? (
+                          <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                            <CheckCircle className="h-3 w-3" />
+                            Connected
+                            {expiresAt && (
+                              <span className="text-muted-foreground ml-1">
+                                · Expires {new Date(expiresAt).toLocaleDateString()}
+                              </span>
                             )}
-                          </div>
-                        </div>
-
-                        {/* Configuration Form */}
-                        {isEditing && (
-                          <div className="pt-5 border-t space-y-5 bg-muted/30 -mx-6 px-6 py-5 rounded-b-lg">
-                            {platformName === "twitter" && (
-                              <div className="space-y-2">
-                                <label className="block text-sm font-semibold">
-                                  Bearer Token (API v2)
-                                </label>
-                                <div className="relative">
-                                  <Input
-                                    type={
-                                      showPasswords[`${platformName}_bearer`]
-                                        ? "text"
-                                        : "password"
-                                    }
-                                    value={config.bearer_token || ""}
-                                    onChange={(e) =>
-                                      updatePlatformConfig(
-                                        platformName,
-                                        "bearer_token",
-                                        e.target.value,
-                                      )
-                                    }
-                                    placeholder="Enter your Twitter Bearer Token"
-                                    className="pr-10"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setShowPasswords((prev) => ({
-                                        ...prev,
-                                        [`${platformName}_bearer`]:
-                                          !prev[`${platformName}_bearer`],
-                                      }))
-                                    }
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                                  >
-                                    {showPasswords[`${platformName}_bearer`] ? (
-                                      <EyeOff className="h-4 w-4 shrink-0" />
-                                    ) : (
-                                      <Eye className="h-4 w-4 shrink-0" />
-                                    )}
-                                  </button>
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                  Get your Bearer Token from{" "}
-                                  <a
-                                    href="https://developer.twitter.com"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-primary hover:underline inline-flex items-center gap-1 font-medium"
-                                  >
-                                    Twitter Developer Portal
-                                    <ExternalLink className="h-3 w-3 shrink-0" />
-                                  </a>
-                                </p>
-                              </div>
-                            )}
-
-                            {platformName === "linkedin" && (
-                              <div className="space-y-4">
-                                <div className="space-y-2">
-                                  <label className="block text-sm font-semibold">
-                                    LinkedIn Organization ID
-                                  </label>
-                                  <Input
-                                    type="text"
-                                    value={config.linkedin_org_id || ""}
-                                    onChange={(e) =>
-                                      updatePlatformConfig(
-                                        platformName,
-                                        "linkedin_org_id",
-                                        e.target.value,
-                                      )
-                                    }
-                                    placeholder="Enter LinkedIn Organization ID"
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <label className="block text-sm font-semibold">
-                                    Access Token
-                                  </label>
-                                  <div className="relative">
-                                    <Input
-                                      type={
-                                        showPasswords[`${platformName}_token`]
-                                          ? "text"
-                                          : "password"
-                                      }
-                                      value={config.access_token || ""}
-                                      onChange={(e) =>
-                                        updatePlatformConfig(
-                                          platformName,
-                                          "access_token",
-                                          e.target.value,
-                                        )
-                                      }
-                                      placeholder="Enter LinkedIn Access Token"
-                                      className="pr-10"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setShowPasswords((prev) => ({
-                                          ...prev,
-                                          [`${platformName}_token`]:
-                                            !prev[`${platformName}_token`],
-                                        }))
-                                      }
-                                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                                    >
-                                      {showPasswords[
-                                        `${platformName}_token`
-                                      ] ? (
-                                        <EyeOff className="h-4 w-4 shrink-0" />
-                                      ) : (
-                                        <Eye className="h-4 w-4 shrink-0" />
-                                      )}
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            <div className="flex items-center justify-between pt-3 border-t">
-                              <div className="flex items-center gap-3">
-                                <input
-                                  type="checkbox"
-                                  id={`active_${platformName}`}
-                                  checked={config.is_active || false}
-                                  onChange={(e) =>
-                                    updatePlatformConfig(
-                                      platformName,
-                                      "is_active",
-                                      e.target.checked,
-                                    )
-                                  }
-                                  className="h-4 w-4 rounded border-gray-300 text-primary"
-                                />
-                                <label
-                                  htmlFor={`active_${platformName}`}
-                                  className="text-sm font-medium cursor-pointer"
-                                >
-                                  Enable automatic posting to {platformName}
-                                </label>
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleTest(platformName)}
-                                disabled={testing[platformName]}
-                                className="shrink-0"
-                              >
-                                {testing[platformName] ? (
-                                  <span className="flex items-center gap-2">
-                                    <span className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                    Testing...
-                                  </span>
-                                ) : (
-                                  "Test Connection"
-                                )}
-                              </Button>
-                            </div>
-
-                            {testResult[platformName] && (
-                              <div
-                                className={cn(
-                                  "flex items-start gap-3 p-4 rounded-lg border-2",
-                                  testResult[platformName].success
-                                    ? "bg-green-500/10 border-green-500/30"
-                                    : "bg-red-500/10 border-red-500/30",
-                                )}
-                              >
-                                {testResult[platformName].success ? (
-                                  <>
-                                    <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
-                                    <div className="flex-1">
-                                      <p className="text-sm font-semibold text-green-700 dark:text-green-300">
-                                        Connection Successful
-                                      </p>
-                                      <p className="text-xs text-green-600/80 dark:text-green-400/80 mt-0.5">
-                                        {testResult[platformName].message}
-                                      </p>
-                                    </div>
-                                  </>
-                                ) : (
-                                  <>
-                                    <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-                                    <div className="flex-1">
-                                      <p className="text-sm font-semibold text-red-700 dark:text-red-300">
-                                        Connection Failed
-                                      </p>
-                                      <p className="text-xs text-red-600/80 dark:text-red-400/80 mt-0.5">
-                                        {testResult[platformName].message}
-                                      </p>
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                            )}
-                          </div>
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">Not connected</p>
                         )}
                       </div>
-                    </CardContent>
-                  </Card>
+                    </div>
+
+                    {/* Right: Action Button */}
+                    <div>
+                      {oauthLoading ? (
+                        <Button variant="outline" size="sm" disabled>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        </Button>
+                      ) : oauthConnected ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOAuthDisconnect(platformName)}
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          Disconnect
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => handleOAuthConnect(platformName)}
+                          className="gap-1.5"
+                        >
+                          Connect
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
             </div>
