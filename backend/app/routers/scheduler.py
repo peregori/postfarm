@@ -105,6 +105,20 @@ async def schedule_post(
             },
         )
 
+        # Convert to ScheduledPostData for scheduler
+        from app.services.scheduler_service import ScheduledPostData
+
+        scheduled_post_data = ScheduledPostData(
+            id=str(post["id"]),
+            scheduled_time=scheduled_dt,
+            platform=platform,
+            content=post["content"],
+            user_id=post["user_id"],
+        )
+
+        # Register with scheduler
+        scheduler_service.schedule_post(scheduled_post_data)
+
         return ScheduleResponse(
             id=post["id"],
             draft_id=post["draft_id"],
@@ -179,6 +193,9 @@ async def cancel_post(
             )
 
         await repo.update_status(post_id, user.user_id, "cancelled")
+
+        # Remove from scheduler
+        scheduler_service.unschedule_post(post_id)
 
         # Record for sync
         sync_repo = SyncMetadataRepository()

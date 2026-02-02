@@ -1,14 +1,25 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
+from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 import asyncio
 from app.services.platform_service import PlatformService
 from app.database import SessionLocal
-from app.models import ScheduledPost, PostStatus
+from app.models import ScheduledPost, PostStatus, PlatformType
 from sqlalchemy import select
 from app.config import settings
 import logging
+
+
+@dataclass
+class ScheduledPostData:
+    """Simple data class for scheduled post info needed by scheduler."""
+    id: str
+    scheduled_time: datetime
+    platform: PlatformType
+    content: str
+    user_id: str | None = None
 
 logger = logging.getLogger(__name__)
 
@@ -58,24 +69,55 @@ class SchedulerService:
     
     async def _load_scheduled_posts(self):
         """Load and schedule existing posts from database"""
-        db = SessionLocal()
-        try:
-            result = db.execute(
-                select(ScheduledPost).where(
-                    ScheduledPost.status == PostStatus.SCHEDULED,
-                    ScheduledPost.scheduled_time > datetime.now(timezone.utc)
+        if settings.USE_SUPABASE:
+            # Load from Supabase
+            from app.database_supabase import ScheduledPostRepository
+
+            try:
+                repo = ScheduledPostRepository()
+                # Get all scheduled posts (across all users)
+                posts_data = await repo.get_all_scheduled()
+
+                for post_dict in posts_data:
+                    # Convert dict to ScheduledPost object
+                    scheduled_dt = datetime.fromisoformat(
+                        post_dict["scheduled_time"].replace("Z", "+00:00")
+                    )
+
+                    # Only schedule future posts
+                    if scheduled_dt > datetime.now(timezone.utc):
+                        post_data = ScheduledPostData(
+                            id=str(post_dict["id"]),
+                            scheduled_time=scheduled_dt,
+                            platform=PlatformType(post_dict["platform"]),
+                            content=post_dict["content"],
+                            user_id=post_dict.get("user_id"),
+                        )
+                        self.schedule_post(post_data, retry_count=0)
+
+                logger.info(f"Loaded {len(posts_data)} scheduled posts from Supabase")
+            except Exception as e:
+                logger.error(f"Failed to load scheduled posts from Supabase: {e}")
+        else:
+            # Load from SQLite
+            db = SessionLocal()
+            try:
+                result = db.execute(
+                    select(ScheduledPost).where(
+                        ScheduledPost.status == PostStatus.SCHEDULED,
+                        ScheduledPost.scheduled_time > datetime.now(timezone.utc)
+                    )
                 )
-            )
-            posts = result.scalars().all()
-            
-            for post in posts:
-                self.schedule_post(post, retry_count=0)
-            
-            logger.info(f"Loaded {len(posts)} scheduled posts")
-        finally:
-            db.close()
+                posts = result.scalars().all()
+
+                for post in posts:
+                    self.schedule_post(post, retry_count=0)
+
+                logger.info(f"Loaded {len(posts)} scheduled posts from SQLite")
+            finally:
+                db.close()
     
-    def schedule_post(self, post: ScheduledPost, retry_count: int = 0):
+    def schedule_post(self, post: ScheduledPost | ScheduledPostData, retry_count: int = 0):
         """Schedule a post for execution"""
         trigger = DateTrigger(run_date=post.scheduled_time)
         
@@ -150,12 +192,15 @@ class SchedulerService:
         finally:
             db.close()
     
-    def unschedule_post(self, post_id: int):
+    def unschedule_post(self, post_id):
         """Remove a scheduled post from the scheduler"""
         try:
-            self.scheduler.remove_job(f"post_{post_id}")
+            # Handle both int (SQLite) and str (Supabase UUID)
+            job_id = f"post_{post_id}"
+            self.scheduler.remove_job(job_id)
             logger.info(f"Unscheduled post {post_id}")
-        except:
+        except Exception as e:
+            logger.debug(f"Could not unschedule post {post_id}: {e}")
             pass  # Job might not exist
 
     def _schedule_oauth_cleanup(self):

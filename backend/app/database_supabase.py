@@ -310,6 +310,18 @@ class ScheduledPostRepository:
         response = query.order("created_at", desc=True).execute()
         return response.data
 
+    async def get_all_scheduled(self) -> List[Dict[str, Any]]:
+        """Get all scheduled posts across all users (for scheduler startup)."""
+        response = (
+            self.client.table(self.table)
+            .select("*")
+            .eq("status", "scheduled")
+            .order("scheduled_time", desc=False)
+            .execute()
+        )
+
+        return response.data
+
 
 class SyncMetadataRepository:
     """Repository for sync metadata (tracking deletions)."""
