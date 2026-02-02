@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import PlatformConfig, PlatformType
 from app.services.platform_service import PlatformService
+from app.middleware.auth import ClerkUser, get_current_user
+from app.config import settings
 from sqlalchemy import select
 
 router = APIRouter()
@@ -145,10 +147,20 @@ class PublishRequest(BaseModel):
     content: str
 
 @router.post("/{platform}/publish", response_model=dict)
-async def publish_now(platform: str, request: PublishRequest):
-    """Publish content immediately (for testing)"""
+async def publish_now(
+    platform: str,
+    request: PublishRequest,
+    user: ClerkUser = Depends(get_current_user),
+):
+    """Publish content immediately"""
     try:
-        result = await platform_service.publish_post(platform.lower(), request.content)
+        # Pass user_id for Supabase mode token lookup
+        user_id = user.user_id if settings.USE_SUPABASE else None
+        result = await platform_service.publish_post(
+            platform.lower(),
+            request.content,
+            user_id=user_id
+        )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
