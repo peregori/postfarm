@@ -95,7 +95,7 @@ Solo content creators, indie hackers, and small marketing teams who want a simpl
 ### Next (Phase 8: Real Posting Engine)
 - [x] 6. Background job system (APScheduler or Celery)
 - [x] 7. Scheduled job execution at exact times
-- [ ] 8. Twitter API: post tweet at scheduled time
+- [x] 8. Twitter API: post tweet at scheduled time
 - [ ] 9. LinkedIn API: post update at scheduled time
 - [ ] 10. Post status tracking (pending → publishing → published / failed)
 - [ ] 11. Retry logic with exponential backoff

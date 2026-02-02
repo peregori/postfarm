@@ -130,67 +130,151 @@ class SchedulerService:
         )
         logger.info(f"Scheduled post {post.id} for {post.scheduled_time} (retry: {retry_count})")
     
-    async def _publish_post(self, post_id: int, retry_count: int = 0):
+    async def _publish_post(self, post_id: int | str, retry_count: int = 0):
         """Publish a scheduled post with retry logic"""
-        db = SessionLocal()
-        try:
-            result = db.execute(
-                select(ScheduledPost).where(ScheduledPost.id == post_id)
-            )
-            post = result.scalar_one_or_none()
-            
-            if not post:
+
+        if settings.USE_SUPABASE:
+            # Use Supabase mode
+            from app.database_supabase import ScheduledPostRepository
+
+            repo = ScheduledPostRepository()
+            post_dict = await repo.get_by_id_for_scheduler(str(post_id))
+
+            if not post_dict:
                 logger.error(f"Post {post_id} not found")
                 return
-            
-            if post.status != PostStatus.SCHEDULED and post.status != PostStatus.FAILED:
-                logger.warning(f"Post {post_id} is not in scheduled/failed status: {post.status}")
+
+            if post_dict["status"] not in ["scheduled", "failed"]:
+                logger.warning(f"Post {post_id} is not in scheduled/failed status: {post_dict['status']}")
                 return
-            
+
+            user_id = post_dict.get("user_id")
+            if not user_id:
+                logger.error(f"Post {post_id} has no user_id")
+                return
+
+            platform = post_dict["platform"]
+            content = post_dict["content"]
+
             try:
                 # Publish to platform
                 await self.platform_service.publish_post(
-                    platform=post.platform.value,
-                    content=post.content
+                    platform=platform,
+                    content=content,
+                    user_id=user_id
                 )
-                
+
                 # Update status
-                post.status = PostStatus.POSTED
-                post.posted_at = datetime.now(timezone.utc)
-                post.error_message = None  # Clear any previous errors
-                db.commit()
-                
-                logger.info(f"Successfully posted {post_id} to {post.platform.value}")
-                
+                await repo.update_status(
+                    post_id=str(post_id),
+                    user_id=user_id,
+                    status="posted",
+                    posted_at=datetime.now(timezone.utc),
+                    error_message=None
+                )
+
+                logger.info(f"Successfully posted {post_id} to {platform}")
+
             except Exception as e:
                 error_msg = str(e)
                 logger.error(f"Failed to post {post_id} (attempt {retry_count + 1}): {error_msg}")
-                
+
                 # Check if we should retry
                 if retry_count < self.max_retries:
                     # Calculate retry delay (exponential backoff)
                     delay_seconds = self.retry_delays[min(retry_count, len(self.retry_delays) - 1)]
                     retry_time = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
-                    
+
                     # Update post with error but keep as scheduled for retry
-                    post.status = PostStatus.SCHEDULED
-                    post.error_message = f"Attempt {retry_count + 1} failed: {error_msg}. Retrying in {delay_seconds}s"
-                    post.scheduled_time = retry_time
-                    db.commit()
-                    
+                    await repo.update_status(
+                        post_id=str(post_id),
+                        user_id=user_id,
+                        status="scheduled",
+                        error_message=f"Attempt {retry_count + 1} failed: {error_msg}. Retrying in {delay_seconds}s"
+                    )
+
                     # Reschedule for retry with incremented retry count
                     logger.info(f"Rescheduling post {post_id} for retry {retry_count + 1} at {retry_time}")
-                    self.schedule_post(post, retry_count=retry_count + 1)
-                    
+                    post_data = ScheduledPostData(
+                        id=str(post_id),
+                        scheduled_time=retry_time,
+                        platform=platform,
+                        content=content,
+                        user_id=user_id
+                    )
+                    self.schedule_post(post_data, retry_count=retry_count + 1)
+
                 else:
                     # Max retries reached - move to permanently failed
                     logger.error(f"Post {post_id} failed after {self.max_retries} attempts. Marking as permanently failed.")
-                    post.status = PostStatus.FAILED
-                    post.error_message = f"Failed after {self.max_retries} retry attempts. Last error: {error_msg}"
+                    await repo.update_status(
+                        post_id=str(post_id),
+                        user_id=user_id,
+                        status="failed",
+                        error_message=f"Failed after {self.max_retries} retry attempts. Last error: {error_msg}"
+                    )
+
+        else:
+            # Use SQLite mode
+            db = SessionLocal()
+            try:
+                result = db.execute(
+                    select(ScheduledPost).where(ScheduledPost.id == post_id)
+                )
+                post = result.scalar_one_or_none()
+
+                if not post:
+                    logger.error(f"Post {post_id} not found")
+                    return
+
+                if post.status != PostStatus.SCHEDULED and post.status != PostStatus.FAILED:
+                    logger.warning(f"Post {post_id} is not in scheduled/failed status: {post.status}")
+                    return
+
+                try:
+                    # Publish to platform (no user_id in SQLite mode)
+                    await self.platform_service.publish_post(
+                        platform=post.platform.value,
+                        content=post.content
+                    )
+
+                    # Update status
+                    post.status = PostStatus.POSTED
+                    post.posted_at = datetime.now(timezone.utc)
+                    post.error_message = None  # Clear any previous errors
                     db.commit()
-                    
-        finally:
-            db.close()
+
+                    logger.info(f"Successfully posted {post_id} to {post.platform.value}")
+
+                except Exception as e:
+                    error_msg = str(e)
+                    logger.error(f"Failed to post {post_id} (attempt {retry_count + 1}): {error_msg}")
+
+                    # Check if we should retry
+                    if retry_count < self.max_retries:
+                        # Calculate retry delay (exponential backoff)
+                        delay_seconds = self.retry_delays[min(retry_count, len(self.retry_delays) - 1)]
+                        retry_time = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
+
+                        # Update post with error but keep as scheduled for retry
+                        post.status = PostStatus.SCHEDULED
+                        post.error_message = f"Attempt {retry_count + 1} failed: {error_msg}. Retrying in {delay_seconds}s"
+                        post.scheduled_time = retry_time
+                        db.commit()
+
+                        # Reschedule for retry with incremented retry count
+                        logger.info(f"Rescheduling post {post_id} for retry {retry_count + 1} at {retry_time}")
+                        self.schedule_post(post, retry_count=retry_count + 1)
+
+                    else:
+                        # Max retries reached - move to permanently failed
+                        logger.error(f"Post {post_id} failed after {self.max_retries} attempts. Marking as permanently failed.")
+                        post.status = PostStatus.FAILED
+                        post.error_message = f"Failed after {self.max_retries} retry attempts. Last error: {error_msg}"
+                        db.commit()
+
+            finally:
+                db.close()
     
     def unschedule_post(self, post_id):
         """Remove a scheduled post from the scheduler"""

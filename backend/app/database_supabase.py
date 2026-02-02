@@ -322,6 +322,21 @@ class ScheduledPostRepository:
 
         return response.data
 
+    async def get_by_id_for_scheduler(self, post_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific scheduled post by ID (for scheduler use - bypasses user scoping)."""
+        try:
+            response = (
+                self.client.table(self.table)
+                .select("*")
+                .eq("id", post_id)
+                .limit(1)
+                .execute()
+            )
+
+            return response.data[0] if response.data and len(response.data) > 0 else None
+        except Exception:
+            return None
+
 
 class SyncMetadataRepository:
     """Repository for sync metadata (tracking deletions)."""
