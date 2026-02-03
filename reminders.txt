@@ -1,0 +1,5 @@
+- remove CC as author
+- remove lean factory
+- remove claude dirs and skills
+- update README with cool git stuff and buttons
+- make selfhosted version work and worldwide reachable
