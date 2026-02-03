@@ -195,3 +195,7 @@ backend/handpost.db
 
 # Ralph config (may contain API key)
 .cursor/ralph-config.json
+
+# Claude Code (local dev only)
+.claude/
+CLAUDE.md

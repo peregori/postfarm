@@ -22,12 +22,12 @@ Solo content creators, indie hackers, and small marketing teams who want a simpl
 - Billing: Free tier only
 
 ## Acceptance criteria (testable)
-- [ ] User can create, edit, confirm, and delete drafts
-- [ ] User can schedule confirmed drafts to specific date/time
+- [x] User can create, edit, confirm, and delete drafts
+- [x] User can schedule confirmed drafts to specific date/time
 - [x] User can connect Twitter account via OAuth
 - [x] User can connect LinkedIn account via OAuth
 - [x] Scheduled post publishes to Twitter at the scheduled time
-- [ ] Scheduled post publishes to LinkedIn at the scheduled time
+- [x] Scheduled post publishes to LinkedIn at the scheduled time
 - [ ] User sees clear status: scheduled → posted / failed
 - [ ] Failed posts show error reason + retry option
 - [x] `./scripts/verify.sh` passes on main branch
@@ -74,8 +74,6 @@ Set `USE_SUPABASE=true` for cloud mode. See [DEPLOY.md](./DEPLOY.md).
 - [x] Deployment documentation
 
 ### In Progress
-- [ ] Wire frontend scheduling to create `scheduled_posts` rows
-- [ ] LinkedIn posting test
 - [ ] Post status UI updates
 
 ### Pending

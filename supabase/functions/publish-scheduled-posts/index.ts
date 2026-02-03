@@ -218,19 +218,23 @@ async function postToTwitter(content: string, accessToken: string): Promise<{ id
 }
 
 async function postToLinkedIn(content: string, accessToken: string): Promise<{ id: string }> {
-  // First, get user's LinkedIn profile ID
-  const profileResponse = await fetch("https://api.linkedin.com/v2/me", {
+  // Get user's LinkedIn member ID via OpenID Connect userinfo endpoint
+  // Note: /v2/me requires r_liteprofile scope which is deprecated
+  // With OpenID Connect (openid + profile scopes), use /v2/userinfo instead
+  const profileResponse = await fetch("https://api.linkedin.com/v2/userinfo", {
     headers: {
       "Authorization": `Bearer ${accessToken}`,
     },
   });
 
   if (!profileResponse.ok) {
-    throw new Error(`LinkedIn profile API error: ${profileResponse.status}`);
+    const errorBody = await profileResponse.text();
+    throw new Error(`LinkedIn userinfo API error ${profileResponse.status}: ${errorBody}`);
   }
 
   const profile = await profileResponse.json();
-  const authorUrn = `urn:li:person:${profile.id}`;
+  // The 'sub' claim contains the member ID for OpenID Connect
+  const authorUrn = `urn:li:person:${profile.sub}`;
 
   // Post to LinkedIn
   const postResponse = await fetch("https://api.linkedin.com/v2/ugcPosts", {

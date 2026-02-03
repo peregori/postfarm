@@ -1,5 +1,11 @@
 # Postfarm
 
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Twitter](https://img.shields.io/badge/platform-Twitter-1DA1F2?logo=twitter&logoColor=white)
+![LinkedIn](https://img.shields.io/badge/platform-LinkedIn-0A66C2?logo=linkedin&logoColor=white)
+![Supabase](https://img.shields.io/badge/database-Supabase-3ECF8E?logo=supabase&logoColor=white)
+![Vercel](https://img.shields.io/badge/deploy-Vercel-000000?logo=vercel&logoColor=white)
+
 AI-powered social media scheduling. Write drafts, polish with AI, schedule posts, publish to Twitter/LinkedIn automatically.
 
 ## Features
