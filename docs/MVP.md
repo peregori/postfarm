@@ -27,11 +27,12 @@ Solo content creators, indie hackers, and small marketing teams who want a simpl
 - [ ] User can schedule confirmed drafts to specific date/time
 - [x] User can connect Twitter account via OAuth
 - [x] User can connect LinkedIn account via OAuth
-- [ ] Scheduled post publishes to Twitter at the scheduled time
+- [x] Scheduled post publishes to Twitter at the scheduled time
 - [ ] Scheduled post publishes to LinkedIn at the scheduled time
 - [ ] User sees clear status: pending → publishing → published / failed
 - [ ] Failed posts show error reason + retry option
 - [x] `./scripts/verify.sh` passes on main branch
+- [x] Scheduled post executes in at least one deployment mode (cloud or self-hosted)
 - [ ] Testing: manual QA checklist used per release
 
 ## Manual QA checklist
@@ -43,14 +44,24 @@ Solo content creators, indie hackers, and small marketing teams who want a simpl
 - [ ] Failed post shows actionable error
 - [ ] Mobile responsive (basic sanity)
 - [ ] Data persists across sessions / devices
+- [ ] **Deployment**: App running in chosen mode (cloud or self-hosted)
+- [ ] **Scheduled execution**: Post scheduled 2 min in future → executes automatically
 
 ## Architecture notes
 - Frontend: React + Vite, Zustand, Clerk auth
 - Backend: Python FastAPI
-- DB: Supabase (PostgreSQL)
-- Queue/jobs: Background worker for scheduled publishing (BullMQ or APScheduler)
-- AI: OpenAI API for draft editing
-- Deployment: Vercel (frontend), Railway/Fly.io (backend)
+- AI: Genini API or GCP Vertex or options for draft editing
+
+### Deployment modes
+
+| Mode | DB | Scheduler | Frontend | Backend | Cost |
+|------|-----|-----------|----------|---------|------|
+| **Cloud** (recommended) | Supabase | pg_cron + Edge Functions | Vercel | Serverless | Free |
+| **Self-hosted** | SQLite | APScheduler | Vercel or local | Docker | Free |
+
+Set `USE_SUPABASE=true` for cloud mode, `USE_SUPABASE=false` for self-hosted.
+
+See [DEPLOY.md](./DEPLOY.md) for setup instructions per mode.
 
 ## Tasks (current phase: Platform Connections & Real Posting)
 
@@ -94,13 +105,31 @@ Solo content creators, indie hackers, and small marketing teams who want a simpl
 
 ### Next (Phase 8: Real Posting Engine)
 - [x] 6. Background job system (APScheduler or Celery)
-- [x] 7. Scheduled job execution at exact times
-- [x] 8. Twitter API: post tweet at scheduled time
+- [ ] 7. Scheduled job execution at exact times *(needs deployment testing)*
+- [ ] 8. Twitter API: post tweet at scheduled time *(needs deployment testing)*
 - [ ] 9. LinkedIn API: post update at scheduled time
 - [ ] 10. Post status tracking (pending → publishing → published / failed)
 - [ ] 11. Retry logic with exponential backoff
 - [ ] 12. Error notifications (toast on failure)
 - [ ] 13. Rate limit handling per platform
+
+### Next (Phase 9: Deployment)
+
+#### Self-hosted mode (Docker)
+- [x] 1. Dockerfile for backend
+- [x] 2. docker-compose.yml
+- [ ] 3. Test on local Mac / VPS
+
+#### Cloud mode (Supabase pg_cron) — Recommended ✅
+- [x] 4. Enable pg_cron + pg_net extensions in Supabase Dashboard
+- [x] 5. Create Edge Function for posting (`supabase/functions/publish-scheduled-posts/`)
+- [x] 6. Create pg_cron SQL migration (`backend/migrations/003_pg_cron_scheduler.sql`)
+- [x] 7. Deploy Edge Function + run pg_cron SQL
+- [x] 8. Test scheduled execution via Supabase
+
+#### Documentation
+- [x] 9. DEPLOY.md with instructions for both modes
+- [x] 10. INTEGRATIONS.md — platform reference
 
 ### Pending (Phase 13: Data Migration)
 - [ ] 14. Migrate from localStorage to Supabase

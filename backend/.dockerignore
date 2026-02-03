@@ -1,0 +1,25 @@
+# Virtual environment
+venv/
+.venv/
+
+# Environment files (secrets)
+.env
+.env.*
+!.env.example
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Local databases
+*.db
+
+# IDE
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
