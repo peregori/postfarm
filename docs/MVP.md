@@ -28,7 +28,7 @@ Solo content creators, indie hackers, and small marketing teams who want a simpl
 - [x] User can connect LinkedIn account via OAuth
 - [x] Scheduled post publishes to Twitter at the scheduled time
 - [x] Scheduled post publishes to LinkedIn at the scheduled time
-- [ ] User sees clear status: scheduled → posted / failed
+- [x] User sees clear status: scheduled → posted / failed
 - [ ] Failed posts show error reason + retry option
 - [x] `./scripts/verify.sh` passes on main branch
 - [x] Scheduled post executes in cloud mode (Supabase pg_cron)

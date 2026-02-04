@@ -32,6 +32,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useDroppable, useDraggable } from '@dnd-kit/core'
 import * as simpleIcons from 'simple-icons'
+import StatusBadge from './StatusBadge'
 
 // Custom hook for dynamic post visibility calculation
 function useDynamicPostVisibility(dayPosts, cellRef, options = {}) {
@@ -124,15 +125,15 @@ function DayViewEventCard({ post, top, height, onClick }) {
       onClick={onClick}
     >
       <div className="p-1 sm:p-1.5 h-full flex flex-col gap-1">
-        {/* Top row: Checkmark + time on left, platform icon on right */}
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-1">
-            <Check className="h-2.5 w-2.5 text-muted-foreground/50" strokeWidth={2.5} />
-            <span className="text-[8px] sm:text-[9px] font-medium text-muted-foreground/70 leading-none">
+        {/* Top row: Time + status on left, platform icon on right */}
+        <div className="flex justify-between items-center gap-1">
+          <div className="flex items-center gap-1 flex-wrap min-w-0">
+            <span className="text-[8px] sm:text-[9px] font-medium text-muted-foreground/70 leading-none flex-shrink-0">
               {timeDisplay}
             </span>
+            <StatusBadge status={post.status} size="dot" />
           </div>
-          
+
           {/* Platform Icon */}
           <div className="shrink-0">
             {post.platform === 'twitter' ? (
@@ -156,8 +157,8 @@ function DayViewEventCard({ post, top, height, onClick }) {
             )}
           </div>
         </div>
-        
-        {/* Bottom row: Content text */}
+
+        {/* Content text */}
         <p className="text-[10px] sm:text-[11px] font-medium text-foreground leading-tight break-words truncate">
           {post.content}
         </p>
@@ -1191,22 +1192,23 @@ export default function Calendar({
                         <div className="grid grid-cols-[1.5fr_1.5fr_2fr] gap-3 sm:gap-4 py-1.5 px-3 sm:px-4 md:px-5 -ml-px">
                         {/* Date & Time Column */}
                         <div className="flex items-center min-w-0">
-                          <div className="flex flex-col gap-0 min-w-0">
+                          <div className="flex flex-col gap-0.5 min-w-0">
                             <span className={cn(
                               "text-xs sm:text-sm font-medium leading-none",
                               isToday && "text-primary font-semibold"
                             )}>
                               {isToday ? 'Today' : format(postDate, 'MMM d, yyyy')}
                             </span>
-                            <div className="flex items-center gap-1 mt-0.5">
+                            <div className="flex items-center gap-1">
                               <Clock className="h-3 w-3 text-muted-foreground shrink-0" />
                               <span className="text-[10px] sm:text-xs text-muted-foreground">
                                 {format(postDate, 'HH:mm')}
                               </span>
                             </div>
+                            <StatusBadge status={post.status} size="sm" />
                           </div>
                         </div>
-                        
+
                         {/* Platform Column */}
                         <div className="flex items-center justify-start">
                           <div className="w-4 flex items-center justify-start">
@@ -1231,9 +1233,9 @@ export default function Calendar({
                             )}
                           </div>
                         </div>
-                        
+
                         {/* Content Column */}
-                        <div className="min-w-0 flex items-center">
+                        <div className="min-w-0 flex flex-col justify-center gap-1">
                           <p className="text-xs sm:text-sm leading-snug line-clamp-2 text-foreground break-words">
                             {(() => {
                               // Try to get full content from draft if available
@@ -1247,6 +1249,12 @@ export default function Calendar({
                               return post.content || 'No content'
                             })()}
                           </p>
+                          {/* Error message for failed posts */}
+                          {post.status === 'failed' && post.error_message && (
+                            <div className="text-[10px] sm:text-xs text-red-600 dark:text-red-400 leading-tight">
+                              {post.error_message}
+                            </div>
+                          )}
                         </div>
                         </div>
                         </div>
@@ -1333,15 +1341,15 @@ function ScheduledPostCard({ post, variant = 'default', itemCount = 1, onClick }
       onClick={handleClick}
     >
       <div className={cn(cardPadding, "flex flex-col", rowGap)}>
-        {/* Top row: Checkmark + time on left, platform icon on right */}
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-1">
-            <Check className={cn("text-muted-foreground/50", checkmarkSize)} strokeWidth={2.5} />
-            <span className={cn(timeSize, "font-medium text-muted-foreground/70 leading-none")}>
+        {/* Top row: Time + status on left, platform icon on right */}
+        <div className="flex justify-between items-center gap-1">
+          <div className="flex items-center gap-1 min-w-0">
+            <span className={cn(timeSize, "font-medium text-muted-foreground/70 leading-none flex-shrink-0")}>
               {timeDisplay}
             </span>
+            <StatusBadge status={post.status} size="dot" />
           </div>
-          
+
           {/* Platform Icon */}
           <div className="shrink-0">
             {post.platform === 'twitter' ? (
@@ -1365,10 +1373,10 @@ function ScheduledPostCard({ post, variant = 'default', itemCount = 1, onClick }
             )}
           </div>
         </div>
-        
-        {/* Bottom row: Content text */}
+
+        {/* Content text */}
         <p className={cn(
-          textSize, 
+          textSize,
           "font-medium text-foreground leading-tight break-words truncate"
         )}>
           {post.content}

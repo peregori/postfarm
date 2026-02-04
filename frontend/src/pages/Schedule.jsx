@@ -129,7 +129,9 @@ export default function Schedule() {
       // Add cache-busting timestamp to ensure we get fresh data
       // Pass current timestamp to prevent caching
       const data = await schedulerApi.calendar(undefined, undefined, true)
+      // Filter out cancelled posts - they should not appear in the UI
       const scheduledPosts = Object.values(data.calendar || {}).flat()
+        .filter(post => post.status !== 'cancelled')
       console.log('loadScheduled - loaded posts:', scheduledPosts.length)
       console.log('loadScheduled - posts:', scheduledPosts.map(p => ({ id: p.id, time: p.scheduled_time })))
       
