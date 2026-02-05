@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "lint": "cd frontend && npm run lint",
+    "test": "cd frontend && npm test",
+    "build": "cd frontend && npm run build"
+  },
   "devDependencies": {
     "shadcn": "^3.6.2"
   }

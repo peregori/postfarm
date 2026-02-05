@@ -1,5 +1,3 @@
-import React from 'react';
-
 // Compact status indicator - just a colored dot
 // size: 'dot' (tiny dot), 'sm' (small with optional label), 'md' (medium with label)
 const StatusBadge = ({ status, size = 'dot' }) => {

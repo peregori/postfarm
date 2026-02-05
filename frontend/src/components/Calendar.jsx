@@ -216,7 +216,7 @@ function DayViewSlotSimple({ slotId, platform, posts, isLast, onPostClick, hour,
 }
 
 // Day View Time Slot Component (legacy - for absolute positioning)
-function DayViewTimeSlot({ hour, hourIdx, currentDate, platform, platformPosts, onPostClick, hours, dragJustEndedRef }) {
+function DayViewTimeSlot({ hour, hourIdx, currentDate, platform, platformPosts, onPostClick, hours, dragJustEndedRef, draggedItemsRef }) {
   const slotId = `timeslot-${format(currentDate, 'yyyy-MM-dd')}-${String(hour).padStart(2, '0')}00`
   const { setNodeRef, isOver } = useDroppable({
     id: slotId,

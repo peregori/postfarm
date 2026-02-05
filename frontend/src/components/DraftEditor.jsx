@@ -848,7 +848,7 @@ export default function DraftEditor({
     cleaned = cleaned.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, "$1");
     cleaned = cleaned.replace(/(?<!_)_([^_]+?)_(?!_)/g, "$1");
     cleaned = cleaned.replace(/^#{1,6}\s+(.+)$/gm, "$1");
-    cleaned = cleaned.replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1");
+    cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
     cleaned = cleaned.replace(/\[([^\]]+)\]\[([^\]]+)\]/g, "$1");
 
     // Normalize whitespace

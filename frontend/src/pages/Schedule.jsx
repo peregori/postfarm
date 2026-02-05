@@ -69,6 +69,26 @@ export default function Schedule() {
   // Track the last user-selected platform to persist across dialog opens/closes
   const lastSelectedPlatformRef = useRef('twitter')
 
+  // DnD state - must be before any conditional returns
+  const [activeId, setActiveId] = useState(null)
+  const [isDraggingState, setIsDraggingState] = useState(false)
+  const dragJustEndedRef = useRef(false)
+  const [calendarKey, setCalendarKey] = useState(0)
+  const [calendarCurrentDate, setCalendarCurrentDate] = useState(new Date())
+  const [calendarView, setCalendarView] = useState('month')
+  // Track which items have started dragging to prevent clicks
+  const draggedItemsRef = useRef(new Set())
+
+  // Configure sensors with distance activation constraint
+  // This requires 8px movement before drag starts, allowing clicks to work
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // 8px movement required before drag activates
+      },
+    })
+  )
+
   // Effect to set platform when selectedDraft changes and dialog is open
   useEffect(() => {
     if (selectedDraft && showScheduleDialog) {
@@ -944,25 +964,6 @@ export default function Schedule() {
       </div>
     )
   }
-
-  const [activeId, setActiveId] = useState(null)
-  const [isDraggingState, setIsDraggingState] = useState(false)
-  const dragJustEndedRef = useRef(false)
-  const [calendarKey, setCalendarKey] = useState(0)
-  const [calendarCurrentDate, setCalendarCurrentDate] = useState(new Date())
-  const [calendarView, setCalendarView] = useState('month')
-  // Track which items have started dragging to prevent clicks
-  const draggedItemsRef = useRef(new Set())
-
-  // Configure sensors with distance activation constraint
-  // This requires 8px movement before drag starts, allowing clicks to work
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8, // 8px movement required before drag activates
-      },
-    })
-  )
 
   const handleDragStart = (event) => {
     const itemId = event.active.id.toString()
