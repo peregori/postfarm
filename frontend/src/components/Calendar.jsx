@@ -16,7 +16,7 @@ import {
   setHours,
   setMinutes,
 } from 'date-fns'
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Grid3x3, LayoutGrid, List, Search, Clock, Check } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Grid3x3, LayoutGrid, List, Search, Clock, Check, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -1251,8 +1251,22 @@ export default function Calendar({
                           </p>
                           {/* Error message for failed posts */}
                           {post.status === 'failed' && post.error_message && (
-                            <div className="text-[10px] sm:text-xs text-red-600 dark:text-red-400 leading-tight">
-                              {post.error_message}
+                            <div className="mt-1 space-y-1">
+                              <div className="text-[10px] sm:text-xs text-red-600 dark:text-red-400 leading-tight">
+                                {post.error_message}
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  onPostClick?.(post)
+                                }}
+                                className="h-6 px-2 text-[10px] sm:text-xs gap-1"
+                              >
+                                <RefreshCw className="h-3 w-3" />
+                                Retry
+                              </Button>
                             </div>
                           )}
                         </div>

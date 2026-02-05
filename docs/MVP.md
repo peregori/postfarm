@@ -29,7 +29,7 @@ Solo content creators, indie hackers, and small marketing teams who want a simpl
 - [x] Scheduled post publishes to Twitter at the scheduled time
 - [x] Scheduled post publishes to LinkedIn at the scheduled time
 - [x] User sees clear status: scheduled → posted / failed
-- [ ] Failed posts show error reason + retry option
+- [x] Failed posts show error reason + retry option
 - [x] `./scripts/verify.sh` passes on main branch
 - [x] Scheduled post executes in cloud mode (Supabase pg_cron)
 

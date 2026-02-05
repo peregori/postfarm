@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { flushSync } from 'react-dom'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Calendar, Clock, Send, Twitter, Linkedin, CheckCircle, X, Trash2, Search, Plus, Sparkles, Edit } from 'lucide-react'
+import { Calendar, Clock, Send, Twitter, Linkedin, CheckCircle, X, Trash2, Search, Plus, Sparkles, Edit, RefreshCw } from 'lucide-react'
 import { schedulerApi, platformsApi, draftsApi } from '../api/client'
 import useDraftStore from '../stores/draftStore'
 import { Button } from '@/components/ui/button'
@@ -218,11 +218,20 @@ export default function Schedule() {
 
     setLoading(true)
     try {
+      console.log('handleSchedule - selectedDraft:', {
+        id: selectedDraft.id,
+        draft_id: selectedDraft.draft_id,
+        status: selectedDraft.status,
+        hasContent: !!selectedDraft.content
+      })
+
       // Determine the draft_id to send to API
       // If selectedDraft has draft_id, it's a post object - use that
       // Otherwise, use selectedDraft.id (which should be the draft's ID)
       let draftIdForApi = selectedDraft.draft_id || selectedDraft.id
       let draftUuidForStore = selectedDraft.id
+
+      console.log('Initial draftIdForApi:', draftIdForApi, 'type:', typeof draftIdForApi)
       
       // If we got a post object, try to find the actual draft for store updates
       if (selectedDraft.draft_id && !drafts.find(d => d.id === selectedDraft.draft_id)) {
@@ -242,18 +251,31 @@ export default function Schedule() {
         return
       }
 
-      // If this is rescheduling an existing post, cancel the old one first
-      const existingPost = scheduled.find(s => 
-        (s.draft_id && s.draft_id === draftIdForApi) || 
-        (s.id && selectedDraft.id && s.id === selectedDraft.id)
-      )
-      
+      // If this is retrying a failed post or rescheduling an existing post, cancel the old one first
+      let existingPost = null
+
+      // Check if selectedDraft is a post object (has status field)
+      if (selectedDraft.status && selectedDraft.status === 'failed') {
+        // This is a retry - find the failed post by ID
+        existingPost = scheduled.find(s => s.id === selectedDraft.id)
+      } else {
+        // This is a regular reschedule - find by draft_id
+        existingPost = scheduled.find(s =>
+          (s.draft_id && s.draft_id === draftIdForApi)
+        )
+      }
+
       if (existingPost && existingPost.id) {
         try {
+          console.log('Cancelling existing post:', existingPost.id, 'status:', existingPost.status)
           await schedulerApi.cancel(existingPost.id)
           if (existingPost.draft_id) {
             unscheduleDraft(existingPost.draft_id)
           }
+          // Optimistically remove the cancelled post from the UI
+          setScheduled(prev => prev.filter(p => p.id !== existingPost.id))
+          // Small delay to let backend process the cancellation
+          await new Promise(resolve => setTimeout(resolve, 100))
         } catch (cancelError) {
           console.warn('Failed to cancel existing post:', cancelError)
           // Continue anyway - might already be cancelled
@@ -292,8 +314,11 @@ export default function Schedule() {
       
       // Validate we have a valid integer ID
       if (!finalDraftId || (typeof finalDraftId !== 'number' && isNaN(parseInt(finalDraftId, 10)))) {
+        console.error('Invalid finalDraftId:', finalDraftId, 'type:', typeof finalDraftId)
         throw new Error('Invalid draft ID. Please try selecting the draft again.')
       }
+
+      console.log('Scheduling with finalDraftId:', finalDraftId, 'platform:', platform)
 
       const response = await schedulerApi.schedule({
         draft_id: finalDraftId,
@@ -1504,6 +1529,18 @@ export default function Schedule() {
                 <div className="text-sm whitespace-pre-wrap text-foreground/90 max-h-48 overflow-y-auto">
                   {preview || <span className="text-muted-foreground italic">No content</span>}
                 </div>
+                {/* Error message for failed posts */}
+                {selectedDraft.status === 'failed' && selectedDraft.error_message && (
+                  <div className="mt-3 p-2 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+                    <div className="flex items-start gap-2">
+                      <X className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs font-medium text-red-700 dark:text-red-400">Failed to post</p>
+                        <p className="text-xs text-red-600 dark:text-red-400 mt-1">{selectedDraft.error_message}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1615,7 +1652,12 @@ export default function Schedule() {
                 {loading ? (
                   <>
                     <Clock className="mr-2 h-4 w-4 animate-spin shrink-0" />
-                    Scheduling...
+                    {selectedDraft?.status === 'failed' ? 'Retrying...' : 'Scheduling...'}
+                  </>
+                ) : selectedDraft?.status === 'failed' ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 shrink-0" />
+                    Retry
                   </>
                 ) : (
                   <>

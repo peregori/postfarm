@@ -186,7 +186,7 @@ async def cancel_post(
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
 
-        if post["status"] != "scheduled":
+        if post["status"] not in ["scheduled", "failed"]:
             raise HTTPException(
                 status_code=400,
                 detail=f"Cannot cancel post with status: {post['status']}",
@@ -217,7 +217,7 @@ async def cancel_post(
         if not post:
             raise HTTPException(status_code=404, detail="Post not found")
 
-        if post.status != PostStatus.SCHEDULED:
+        if post.status not in [PostStatus.SCHEDULED, PostStatus.FAILED]:
             raise HTTPException(
                 status_code=400,
                 detail=f"Cannot cancel post with status: {post.status.value}",
@@ -278,6 +278,7 @@ async def get_calendar(
                     "scheduled_time": post["scheduled_time"],
                     "draft_id": post["draft_id"],
                     "status": post["status"],
+                    "error_message": post.get("error_message"),
                 }
             )
 
@@ -315,6 +316,7 @@ async def get_calendar(
                     "scheduled_time": post.scheduled_time.isoformat(),
                     "draft_id": str(post.draft_id),
                     "status": post.status.value,
+                    "error_message": post.error_message,
                 }
             )
 
